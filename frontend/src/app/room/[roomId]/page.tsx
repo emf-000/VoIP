@@ -1,11 +1,13 @@
-"use client";
-
-import { useParams } from "next/navigation";
 import VideoCall from "@/components/VideoCall";
 
-export default function Room() {
-  const params = useParams();
-  const roomId = params.roomId as string;
+type Props = {
+  params: {
+    roomId: string;
+  };
+};
+
+export default function Room({ params }: Props) {
+  const { roomId } = params;
 
   return (
     <div className="p-4 bg-black min-h-screen text-white">
