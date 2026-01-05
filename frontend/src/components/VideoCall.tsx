@@ -4,8 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
 
 const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: [
+    {
+      urls: "stun:stun.l.google.com:19302",
+    },
+    {
+      urls: "turn:openrelay.metered.ca:80",
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
+  ],
 };
+
 
 export default function VideoCall({ roomId }: { roomId: string }) {
   const localVideo = useRef<HTMLVideoElement>(null);
