@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
 
+/**
+ * ✅ FOR PRESENTATION: FORCE TURN ONLY
+ * (STUN removed to avoid ICE confusion)
+ */
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    {
-      urls: "stun:stun.l.google.com:19302",
-    },
     {
       urls: "turn:openrelay.metered.ca:80",
       username: "openrelayproject",
@@ -15,7 +16,6 @@ const ICE_SERVERS: RTCConfiguration = {
     },
   ],
 };
-
 
 export default function VideoCall({ roomId }: { roomId: string }) {
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -27,6 +27,8 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
+
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
   const [remoteReady, setRemoteReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -64,31 +66,63 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         };
       });
 
+    /**
+     * ✅ CREATE OFFER AFTER TRACKS ARE READY
+     */
     socket.on("user-joined", async () => {
       if (!peer.current) return;
 
-      const offer = await peer.current.createOffer();
-      await peer.current.setLocalDescription(offer);
-
-      socket.emit("offer", { roomId, offer });
+      setTimeout(async () => {
+        const offer = await peer.current!.createOffer();
+        await peer.current!.setLocalDescription(offer);
+        socket.emit("offer", { roomId, offer });
+      }, 500);
     });
 
+    /**
+     * ✅ HANDLE OFFER
+     */
     socket.on("offer", async (offer) => {
       if (!peer.current) return;
 
       await peer.current.setRemoteDescription(offer);
+
+      // 🔑 APPLY QUEUED ICE CANDIDATES
+      pendingCandidates.current.forEach((c) =>
+        peer.current?.addIceCandidate(c)
+      );
+      pendingCandidates.current = [];
+
       const answer = await peer.current.createAnswer();
       await peer.current.setLocalDescription(answer);
 
       socket.emit("answer", { roomId, answer });
     });
 
+    /**
+     * ✅ HANDLE ANSWER
+     */
     socket.on("answer", async (answer) => {
-      await peer.current?.setRemoteDescription(answer);
+      if (!peer.current) return;
+
+      await peer.current.setRemoteDescription(answer);
+
+      // 🔑 APPLY QUEUED ICE CANDIDATES
+      pendingCandidates.current.forEach((c) =>
+        peer.current?.addIceCandidate(c)
+      );
+      pendingCandidates.current = [];
     });
 
+    /**
+     * ✅ QUEUE ICE CANDIDATES UNTIL REMOTE SDP EXISTS
+     */
     socket.on("ice-candidate", (candidate) => {
-      peer.current?.addIceCandidate(candidate);
+      if (peer.current?.remoteDescription) {
+        peer.current.addIceCandidate(candidate);
+      } else {
+        pendingCandidates.current.push(candidate);
+      }
     });
 
     return () => {
@@ -140,7 +174,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       return;
     }
 
-    alert(" Recording started");
+    alert("🔴 Recording started");
 
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
@@ -199,7 +233,6 @@ export default function VideoCall({ roomId }: { roomId: string }) {
   // ================= UI =================
   return (
     <div className="min-h-screen bg-black text-white flex flex-col p-2 sm:p-4">
-      {/* Videos */}
       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
         <video
           ref={localVideo}
@@ -216,11 +249,10 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         />
       </div>
 
-      {/* Controls */}
       <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-between">
         <button
           onClick={startScreenShare}
-          className="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm sm:text-base"
+          className="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600"
         >
           Share Screen
         </button>
@@ -228,7 +260,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         <button
           onClick={startRecording}
           disabled={!remoteReady || isRecording}
-          className="px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-sm sm:text-base"
+          className="px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-gray-600"
         >
           Start Recording
         </button>
@@ -236,12 +268,11 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         <button
           onClick={stopRecording}
           disabled={!isRecording}
-          className="px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-sm sm:text-base"
+          className="px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600"
         >
           Stop & Save
         </button>
       </div>
     </div>
   );
-
 }
