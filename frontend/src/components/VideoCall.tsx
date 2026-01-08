@@ -4,16 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
 
 
+const TURN_URL = process.env.NEXT_PUBLIC_TURN_URL;
+const TURN_USERNAME = process.env.NEXT_PUBLIC_TURN_USERNAME;
+const TURN_CREDENTIAL = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    {
-      urls: process.env.NEXT_PUBLIC_TURN_URL!,
-      username: process.env.NEXT_PUBLIC_TURN_USERNAME!,
-      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL!,
-    },
+    { urls: ["stun:stun.l.google.com:19302"] },
+    ...(TURN_URL && TURN_USERNAME && TURN_CREDENTIAL
+      ? [
+          {
+            urls: [TURN_URL],
+            username: TURN_USERNAME,
+            credential: TURN_CREDENTIAL,
+          },
+        ]
+      : []),
   ],
 };
+
 
 
 export default function VideoCall({ roomId }: { roomId: string }) {
