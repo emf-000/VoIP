@@ -1,25 +1,30 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import VideoCall from "@/components/VideoCall";
 
-type Props = {
-  params: {
-    roomId?: string;
-  };
-};
+export default function RoomPage() {
+  const [roomId, setRoomId] = useState<string>("");
 
-export default function Room({ params }: Props) {
-  const roomId =
-    typeof params?.roomId === "string" ? params.roomId : "";
+  useEffect(() => {
+    const path = window.location.pathname;
+    const id = path.split("/room/")[1];
+
+    if (id) {
+      console.log(" Extracted roomId:", id);
+      setRoomId(id);
+    } else {
+      console.error(" Failed to extract roomId from URL");
+    }
+  }, []);
 
   if (!roomId) {
-    console.error(" Invalid roomId:", params?.roomId);
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        Invalid Room
+        Loading room…
       </div>
     );
   }
-
-  console.log(" Room page loaded with roomId:", roomId);
 
   return (
     <div className="p-4 bg-black min-h-screen text-white">
