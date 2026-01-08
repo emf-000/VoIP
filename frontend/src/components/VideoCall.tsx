@@ -3,19 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
 
-/**
- * ✅ FOR PRESENTATION: FORCE TURN ONLY
- * (STUN removed to avoid ICE confusion)
- */
+
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
     {
-      urls: "turn:openrelay.metered.ca:80",
-      username: "openrelayproject",
-      credential: "openrelayproject",
+      urls: process.env.NEXT_PUBLIC_TURN_URL!,
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME!,
+      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL!,
     },
   ],
 };
+
 
 export default function VideoCall({ roomId }: { roomId: string }) {
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -25,10 +24,11 @@ export default function VideoCall({ roomId }: { roomId: string }) {
   const localStream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
 
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  const isInitiator = useRef(false);
+
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
-
-  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
 
   const [remoteReady, setRemoteReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -36,6 +36,10 @@ export default function VideoCall({ roomId }: { roomId: string }) {
   // ================= WEBRTC =================
   useEffect(() => {
     socket.emit("join-room", roomId);
+
+    socket.on("role", ({ initiator }) => {
+      isInitiator.current = initiator;
+    });
 
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
@@ -66,28 +70,20 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         };
       });
 
-    /**
-     * ✅ CREATE OFFER AFTER TRACKS ARE READY
-     */
+    // ONLY INITIATOR CREATES OFFER
     socket.on("user-joined", async () => {
-      if (!peer.current) return;
+      if (!peer.current || !isInitiator.current) return;
 
-      setTimeout(async () => {
-        const offer = await peer.current!.createOffer();
-        await peer.current!.setLocalDescription(offer);
-        socket.emit("offer", { roomId, offer });
-      }, 500);
+      const offer = await peer.current.createOffer();
+      await peer.current.setLocalDescription(offer);
+      socket.emit("offer", { roomId, offer });
     });
 
-    /**
-     * ✅ HANDLE OFFER
-     */
     socket.on("offer", async (offer) => {
       if (!peer.current) return;
 
       await peer.current.setRemoteDescription(offer);
 
-      // 🔑 APPLY QUEUED ICE CANDIDATES
       pendingCandidates.current.forEach((c) =>
         peer.current?.addIceCandidate(c)
       );
@@ -95,28 +91,20 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
       const answer = await peer.current.createAnswer();
       await peer.current.setLocalDescription(answer);
-
       socket.emit("answer", { roomId, answer });
     });
 
-    /**
-     * ✅ HANDLE ANSWER
-     */
     socket.on("answer", async (answer) => {
       if (!peer.current) return;
 
       await peer.current.setRemoteDescription(answer);
 
-      // 🔑 APPLY QUEUED ICE CANDIDATES
       pendingCandidates.current.forEach((c) =>
         peer.current?.addIceCandidate(c)
       );
       pendingCandidates.current = [];
     });
 
-    /**
-     * ✅ QUEUE ICE CANDIDATES UNTIL REMOTE SDP EXISTS
-     */
     socket.on("ice-candidate", (candidate) => {
       if (peer.current?.remoteDescription) {
         peer.current.addIceCandidate(candidate);
@@ -126,11 +114,11 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     });
 
     return () => {
+      socket.off("role");
       socket.off("user-joined");
       socket.off("offer");
       socket.off("answer");
       socket.off("ice-candidate");
-
       peer.current?.close();
       peer.current = null;
     };
@@ -146,35 +134,24 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     });
 
     const screenTrack = screenStream.current.getVideoTracks()[0];
-
     const sender = peer.current
       .getSenders()
       .find((s) => s.track?.kind === "video");
 
     sender?.replaceTrack(screenTrack);
 
-    if (localVideo.current) {
-      localVideo.current.srcObject = screenStream.current;
-    }
+    if (localVideo.current) localVideo.current.srcObject = screenStream.current;
 
     screenTrack.onended = () => {
-      const camTrack = localStream.current!.getVideoTracks()[0];
-      sender?.replaceTrack(camTrack);
-
-      if (localVideo.current) {
+      sender?.replaceTrack(localStream.current!.getVideoTracks()[0]);
+      if (localVideo.current)
         localVideo.current.srcObject = localStream.current;
-      }
     };
   };
 
   // ================= RECORDING =================
   const startRecording = () => {
-    if (!localStream.current || !remoteReady) {
-      alert("Wait for other user to join");
-      return;
-    }
-
-    alert("🔴 Recording started");
+    if (!localStream.current || !remoteReady) return;
 
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
@@ -183,9 +160,8 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       .createMediaStreamSource(localStream.current)
       .connect(destination);
 
-    const remoteStream = remoteVideo.current?.srcObject as MediaStream;
     audioContext
-      .createMediaStreamSource(remoteStream)
+      .createMediaStreamSource(remoteVideo.current!.srcObject as MediaStream)
       .connect(destination);
 
     const videoTrack =
@@ -199,77 +175,40 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
     recordedChunks.current = [];
 
-    mediaRecorder.current = new MediaRecorder(finalStream, {
-      mimeType: "video/webm",
-    });
-
-    mediaRecorder.current.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.current.push(e.data);
-    };
+    mediaRecorder.current = new MediaRecorder(finalStream);
+    mediaRecorder.current.ondataavailable = (e) =>
+      recordedChunks.current.push(e.data);
 
     mediaRecorder.current.onstop = () => {
       const blob = new Blob(recordedChunks.current, { type: "video/webm" });
       const url = URL.createObjectURL(blob);
-
       const a = document.createElement("a");
       a.href = url;
-      a.download = "call-recording.webm";
+      a.download = "recording.webm";
       a.click();
-
       setIsRecording(false);
-      alert("✅ Recording saved");
     };
 
-    mediaRecorder.current.start(1000);
+    mediaRecorder.current.start();
     setIsRecording(true);
   };
 
-  const stopRecording = () => {
-    if (mediaRecorder.current && isRecording) {
-      mediaRecorder.current.stop();
-    }
-  };
+  const stopRecording = () => mediaRecorder.current?.stop();
 
   // ================= UI =================
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col p-2 sm:p-4">
-      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <video
-          ref={localVideo}
-          autoPlay
-          muted
-          playsInline
-          className="w-full h-full max-h-[45vh] sm:max-h-full object-cover rounded-lg bg-black"
-        />
-        <video
-          ref={remoteVideo}
-          autoPlay
-          playsInline
-          className="w-full h-full max-h-[45vh] sm:max-h-full object-cover rounded-lg bg-black"
-        />
+    <div className="min-h-screen bg-black text-white flex flex-col p-4">
+      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <video ref={localVideo} autoPlay muted playsInline className="rounded" />
+        <video ref={remoteVideo} autoPlay playsInline className="rounded" />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-between">
-        <button
-          onClick={startScreenShare}
-          className="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600"
-        >
-          Share Screen
-        </button>
-
-        <button
-          onClick={startRecording}
-          disabled={!remoteReady || isRecording}
-          className="px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-gray-600"
-        >
+      <div className="flex gap-3 justify-center mt-4">
+        <button onClick={startScreenShare}>Share Screen</button>
+        <button onClick={startRecording} disabled={!remoteReady || isRecording}>
           Start Recording
         </button>
-
-        <button
-          onClick={stopRecording}
-          disabled={!isRecording}
-          className="px-4 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600"
-        >
+        <button onClick={stopRecording} disabled={!isRecording}>
           Stop & Save
         </button>
       </div>
