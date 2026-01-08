@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
 
-
 const TURN_URL = process.env.NEXT_PUBLIC_TURN_URL;
 const TURN_USERNAME = process.env.NEXT_PUBLIC_TURN_USERNAME;
 const TURN_CREDENTIAL = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
@@ -22,7 +21,6 @@ const ICE_SERVERS: RTCConfiguration = {
       : []),
   ],
 };
-
 
 export default function VideoCall({ roomId }: { roomId: string }) {
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -43,6 +41,12 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
   // ================= WEBRTC =================
   useEffect(() => {
+    if (!roomId) {
+      console.error("roomId is empty");
+      return;
+    }
+
+    console.log("Joining room:", roomId);
     socket.emit("join-room", roomId);
 
     socket.on("role", ({ initiator }) => {
@@ -78,7 +82,6 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         };
       });
 
-    // ONLY INITIATOR CREATES OFFER
     socket.on("user-joined", async () => {
       if (!peer.current || !isInitiator.current) return;
 
