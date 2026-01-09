@@ -28,7 +28,6 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
   const peer = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
-  const screenStream = useRef<MediaStream | null>(null);
 
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
   const isInitiator = useRef(false);
@@ -73,7 +72,10 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
         peer.current.onicecandidate = (event) => {
           if (event.candidate) {
-            socket.emit("ice-candidate", { roomId, candidate: event.candidate });
+            socket.emit("ice-candidate", {
+              roomId,
+              candidate: event.candidate,
+            });
           }
         };
       });
@@ -131,23 +133,24 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     };
   }, [roomId]);
 
-  // ================= SCREEN SHARE =================
+  // ================= SCREEN SHARE (OPTIONAL – FOR PEER ONLY) =================
   const startScreenShare = async () => {
     if (!peer.current || !localStream.current) return;
 
-    screenStream.current = await navigator.mediaDevices.getDisplayMedia({
+    const screen = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true,
     });
 
-    const screenTrack = screenStream.current.getVideoTracks()[0];
+    const screenTrack = screen.getVideoTracks()[0];
+
     const sender = peer.current
       .getSenders()
       .find((s) => s.track?.kind === "video");
 
     sender?.replaceTrack(screenTrack);
 
-    if (localVideo.current) localVideo.current.srcObject = screenStream.current;
+    if (localVideo.current) localVideo.current.srcObject = screen;
 
     screenTrack.onended = () => {
       sender?.replaceTrack(localStream.current!.getVideoTracks()[0]);
@@ -156,37 +159,38 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     };
   };
 
-  // ================= RECORDING =================
-  const startRecording = () => {
-    if (!peer.current || !remoteReady) return;
-
-    const videoSender = peer.current
-      .getSenders()
-      .find((s) => s.track?.kind === "video");
-
-    if (!videoSender?.track) {
-      alert("No video track available for recording");
+  // ================= RECORDING (ALWAYS SCREEN) =================
+  const startRecording = async () => {
+    if (!remoteReady || !localStream.current) {
+      alert("Wait for other user to join");
       return;
     }
+
+    // 🔴 ALWAYS ASK FOR SCREEN
+    const screen = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+    });
 
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
 
+    // 🎤 local mic
     audioContext
-      .createMediaStreamSource(localStream.current!)
+      .createMediaStreamSource(localStream.current)
       .connect(destination);
 
+    // 🔊 remote audio
     audioContext
       .createMediaStreamSource(remoteVideo.current!.srcObject as MediaStream)
       .connect(destination);
 
     const finalStream = new MediaStream([
-      videoSender.track,
+      screen.getVideoTracks()[0],
       ...destination.stream.getAudioTracks(),
     ]);
 
     recordedChunks.current = [];
-
     mediaRecorder.current = new MediaRecorder(finalStream);
 
     mediaRecorder.current.ondataavailable = (e) => {
@@ -198,7 +202,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "recording.webm";
+      a.download = "screen-recording.webm";
       a.click();
 
       setIsRecording(false);
@@ -212,6 +216,11 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     timerRef.current = setInterval(() => {
       setRecordSeconds((s) => s + 1);
     }, 1000);
+
+    // stop recording if user stops sharing screen
+    screen.getVideoTracks()[0].onended = () => {
+      mediaRecorder.current?.stop();
+    };
   };
 
   const stopRecording = () => {
