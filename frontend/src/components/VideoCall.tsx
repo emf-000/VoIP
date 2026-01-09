@@ -38,15 +38,14 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
   const [remoteReady, setRemoteReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // ================= WEBRTC =================
   useEffect(() => {
-    if (!roomId) {
-      console.error("roomId is empty");
-      return;
-    }
+    if (!roomId) return;
 
-    console.log("Joining room:", roomId);
     socket.emit("join-room", roomId);
 
     socket.on("role", ({ initiator }) => {
@@ -74,10 +73,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
         peer.current.onicecandidate = (event) => {
           if (event.candidate) {
-            socket.emit("ice-candidate", {
-              roomId,
-              candidate: event.candidate,
-            });
+            socket.emit("ice-candidate", { roomId, candidate: event.candidate });
           }
         };
       });
@@ -187,8 +183,10 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     recordedChunks.current = [];
 
     mediaRecorder.current = new MediaRecorder(finalStream);
-    mediaRecorder.current.ondataavailable = (e) =>
-      recordedChunks.current.push(e.data);
+
+    mediaRecorder.current.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.current.push(e.data);
+    };
 
     mediaRecorder.current.onstop = () => {
       const blob = new Blob(recordedChunks.current, { type: "video/webm" });
@@ -197,18 +195,34 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       a.href = url;
       a.download = "recording.webm";
       a.click();
+
       setIsRecording(false);
+      setRecordSeconds(0);
+      if (timerRef.current) clearInterval(timerRef.current);
     };
 
     mediaRecorder.current.start();
     setIsRecording(true);
+
+    timerRef.current = setInterval(() => {
+      setRecordSeconds((s) => s + 1);
+    }, 1000);
   };
 
-  const stopRecording = () => mediaRecorder.current?.stop();
+  const stopRecording = () => {
+    mediaRecorder.current?.stop();
+  };
 
   // ================= UI =================
   return (
     <div className="min-h-screen bg-black text-white flex flex-col p-4">
+      {isRecording && (
+        <div className="flex items-center justify-center gap-2 text-red-500 font-semibold mb-2">
+          <span className="animate-pulse text-2xl">●</span>
+          Recording… {recordSeconds}s
+        </div>
+      )}
+
       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <video ref={localVideo} autoPlay muted playsInline className="rounded" />
         <video ref={remoteVideo} autoPlay playsInline className="rounded" />
@@ -216,10 +230,24 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
       <div className="flex gap-3 justify-center mt-4">
         <button onClick={startScreenShare}>Share Screen</button>
-        <button onClick={startRecording} disabled={!remoteReady || isRecording}>
-          Start Recording
+
+        <button
+          onClick={startRecording}
+          disabled={!remoteReady || isRecording}
+          className={`px-4 py-2 rounded ${
+            isRecording
+              ? "bg-red-800 cursor-not-allowed"
+              : "bg-red-600 hover:bg-red-700"
+          }`}
+        >
+          {isRecording ? "Recording…" : "Start Recording"}
         </button>
-        <button onClick={stopRecording} disabled={!isRecording}>
+
+        <button
+          onClick={stopRecording}
+          disabled={!isRecording}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded disabled:bg-gray-600"
+        >
           Stop & Save
         </button>
       </div>
