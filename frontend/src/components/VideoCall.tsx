@@ -158,25 +158,30 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
   // ================= RECORDING =================
   const startRecording = () => {
-    if (!localStream.current || !remoteReady) return;
+    if (!peer.current || !remoteReady) return;
+
+    const videoSender = peer.current
+      .getSenders()
+      .find((s) => s.track?.kind === "video");
+
+    if (!videoSender?.track) {
+      alert("No video track available for recording");
+      return;
+    }
 
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
 
     audioContext
-      .createMediaStreamSource(localStream.current)
+      .createMediaStreamSource(localStream.current!)
       .connect(destination);
 
     audioContext
       .createMediaStreamSource(remoteVideo.current!.srcObject as MediaStream)
       .connect(destination);
 
-    const videoTrack =
-      screenStream.current?.getVideoTracks()[0] ||
-      localStream.current.getVideoTracks()[0];
-
     const finalStream = new MediaStream([
-      videoTrack,
+      videoSender.track,
       ...destination.stream.getAudioTracks(),
     ]);
 
