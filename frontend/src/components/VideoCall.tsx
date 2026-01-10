@@ -133,7 +133,6 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     };
   }, [roomId]);
 
-  // ================= SCREEN SHARE (OPTIONAL – FOR PEER ONLY) =================
   const startScreenShare = async () => {
     if (!peer.current || !localStream.current) return;
 
@@ -159,14 +158,12 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     };
   };
 
-  // ================= RECORDING (ALWAYS SCREEN) =================
   const startRecording = async () => {
     if (!remoteReady || !localStream.current) {
       alert("Wait for other user to join");
       return;
     }
 
-    // 🔴 ALWAYS ASK FOR SCREEN
     const screen = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true,
@@ -175,12 +172,10 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
 
-    // 🎤 local mic
     audioContext
       .createMediaStreamSource(localStream.current)
       .connect(destination);
 
-    // 🔊 remote audio
     audioContext
       .createMediaStreamSource(remoteVideo.current!.srcObject as MediaStream)
       .connect(destination);
@@ -217,7 +212,6 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       setRecordSeconds((s) => s + 1);
     }, 1000);
 
-    // stop recording if user stops sharing screen
     screen.getVideoTracks()[0].onended = () => {
       mediaRecorder.current?.stop();
     };

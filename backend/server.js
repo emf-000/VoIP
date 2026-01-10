@@ -26,11 +26,9 @@ io.on("connection", (socket) => {
     socket.join(roomId);
     console.log(`User ${socket.id} joined room ${roomId}`);
 
-    // First user → initiator
     if (usersInRoom === 0) {
       socket.emit("role", { initiator: true });
     }
-    // Second user → responder
     else {
       socket.emit("role", { initiator: false });
       socket.to(roomId).emit("user-joined");
