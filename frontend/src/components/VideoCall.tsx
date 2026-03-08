@@ -196,6 +196,21 @@ export default function VideoCall({
     alert("Room is full. Only 2 users allowed.");
     router.push("/");
   });  
+
+  socket.on("user-left", () => {
+    console.log("Peer left the call");
+
+    if (remoteVideo.current) {
+      remoteVideo.current.srcObject = null;
+    }
+
+    if (peer.current) {
+      peer.current.close();
+      peer.current = null;
+    }
+
+    setRemoteReady(false);
+  });
     
   socket.on("user-joined", async () => {
     if (!initiator) return;
@@ -245,6 +260,7 @@ export default function VideoCall({
       socket.off("ice-candidate");
       socket.off("user-joined");
       socket.off("room-full");
+      socket.off("user-left");
       cleanupMedia();
     };
   }, [roomId, initiator]);
