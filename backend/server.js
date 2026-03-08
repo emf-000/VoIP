@@ -47,26 +47,37 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.user.id);
 
-  socket.on("join-room", (roomId) => {
-    if (!roomId) return;
+socket.on("join-room", (roomId) => {
+  if (!roomId) return;
 
-    const room = io.sockets.adapter.rooms.get(roomId);
-    const usersInRoom = room ? room.size : 0;
+  socket.join(roomId);
 
-    socket.join(roomId);
+  const room = io.sockets.adapter.rooms.get(roomId);
+  const users = room ? [...room] : [];
 
-    console.log(`User ${socket.user.id} joined room ${roomId}`);
+  if (users.length > 2) {
+  console.log("Room full:", roomId);
 
-    if (usersInRoom === 0) {
-      socket.emit("role", { initiator: true });
-    } else {
-      socket.emit("role", { initiator: false });
+  socket.emit("room-full");
 
-      socket.to(roomId).emit("user-joined", {
-        userId: socket.user.id,
-      });
-    }
-  });
+  socket.leave(roomId);
+
+  return;
+}
+
+  console.log(`User ${socket.user.id} joined room ${roomId}`);
+
+  // First user becomes initiator
+  if (users.length === 1) {
+    socket.emit("role", { initiator: true });
+  } else {
+    socket.emit("role", { initiator: false });
+
+    socket.to(roomId).emit("user-joined", {
+      userId: socket.user.id,
+    });
+  }
+});
 
     socket.on("leave-room", (roomId) => {
     console.log(`User ${socket.user.id} leaving room ${roomId}`);
@@ -89,6 +100,16 @@ io.on("connection", (socket) => {
   socket.on("ice-candidate", ({ roomId, candidate }) => {
     socket.to(roomId).emit("ice-candidate", candidate);
   });
+
+  socket.on("disconnecting", () => {
+  socket.rooms.forEach((roomId) => {
+    if (roomId !== socket.id) {
+      socket.to(roomId).emit("user-left", {
+        userId: socket.user.id,
+      });
+    }
+  });
+});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user?.id);

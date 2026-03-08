@@ -191,6 +191,11 @@ export default function VideoCall({
         pendingCandidates.current.push(candidate);
       }
     });
+
+    socket.on("room-full", () => {
+    alert("Room is full. Only 2 users allowed.");
+    router.push("/");
+  });  
     
   socket.on("user-joined", async () => {
     if (!initiator) return;
@@ -239,6 +244,7 @@ export default function VideoCall({
       socket.off("answer");
       socket.off("ice-candidate");
       socket.off("user-joined");
+      socket.off("room-full");
       cleanupMedia();
     };
   }, [roomId, initiator]);
