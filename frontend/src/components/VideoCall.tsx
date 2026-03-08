@@ -110,8 +110,6 @@ export default function VideoCall({
         if (remoteVideo.current) {
           remoteVideo.current.srcObject = null;
         }
-
-        peer.current?.close();
       }
   };
 
@@ -197,20 +195,6 @@ export default function VideoCall({
     router.push("/");
   });  
 
-  socket.on("user-left", () => {
-    console.log("Peer left the call");
-
-    if (remoteVideo.current) {
-      remoteVideo.current.srcObject = null;
-    }
-
-    if (peer.current) {
-      peer.current.close();
-      peer.current = null;
-    }
-
-    setRemoteReady(false);
-  });
     
   socket.on("user-joined", async () => {
     if (!initiator) return;
@@ -252,6 +236,21 @@ export default function VideoCall({
     await peer.current.setLocalDescription(offer);
 
     socket.emit("offer", { roomId, offer });
+  });
+
+  socket.on("user-left", () => {
+    console.log("Peer left");
+
+    if (remoteVideo.current) {
+      remoteVideo.current.srcObject = null;
+    }
+
+    if (peer.current) {
+      peer.current.close();
+      peer.current = null;
+    }
+
+    setRemoteReady(false);
   });
 
     return () => {
