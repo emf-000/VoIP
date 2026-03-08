@@ -46,6 +46,10 @@ export default function VideoCall({
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
 
+  const isMobile =
+  typeof window !== "undefined" &&
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   useEffect(() => {
     if (!roomId) return;
 
@@ -188,16 +192,47 @@ export default function VideoCall({
       }
     });
     
-    socket.on("user-joined", async () => {
-        if (!peer.current || !initiator) return;
+  socket.on("user-joined", async () => {
+    if (!initiator) return;
 
-        console.log("Second user joined. Creating offer...");
+    console.log("Second user joined");
 
-        const offer = await peer.current.createOffer();
-        await peer.current.setLocalDescription(offer);
+    if (!peer.current || peer.current.signalingState === "closed") {
+      console.log("Recreating peer connection");
 
-        socket.emit("offer", { roomId, offer });
+      peer.current = new RTCPeerConnection(ICE_SERVERS);
+
+      peer.current.ontrack = (event) => {
+        if (!remoteVideo.current) return;
+
+        const remoteStream =
+          remoteVideo.current.srcObject instanceof MediaStream
+            ? remoteVideo.current.srcObject
+            : new MediaStream();
+
+        remoteStream.addTrack(event.track);
+        remoteVideo.current.srcObject = remoteStream;
+      };
+
+      peer.current.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit("ice-candidate", {
+            roomId,
+            candidate: event.candidate,
+          });
+        }
+      };
+
+      localStream.current?.getTracks().forEach((track) => {
+        peer.current!.addTrack(track, localStream.current!);
       });
+    }
+
+    const offer = await peer.current.createOffer();
+    await peer.current.setLocalDescription(offer);
+
+    socket.emit("offer", { roomId, offer });
+  });
 
     return () => {
       socket.off("offer");
@@ -390,12 +425,13 @@ const stopScreenShare = async () => {
 
   peer.current?.close();
   peer.current = null;
+  pendingCandidates.current = [];
 };
 
 const endCall = () => {
   const socket = getSocket();
 
-  if (socket) socket.disconnect();
+  if (socket) socket.emit("leave-room", roomId);
 
   cleanupMedia();
 
@@ -409,6 +445,12 @@ const endCall = () => {
     {isRecording && (
       <div className="text-center text-red-500 mb-2 text-sm sm:text-base">
         ● Recording... {recordSeconds}s
+      </div>
+    )}
+
+    {isMobile && (
+      <div className="text-center text-yellow-400 mb-2 text-sm">
+        Screen sharing and recording are available on desktop only
       </div>
     )}
 
@@ -437,13 +479,15 @@ const endCall = () => {
 
       <button
         onClick={startScreenShare}
-        className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+        disabled={isMobile}
+        className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
       >
         Share Screen
       </button>
 
       <button
         onClick={stopScreenShare}
+        disabled={isMobile}
         className="bg-gray-700 hover:bg-gray-600 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
       >
         Stop Sharing
@@ -451,7 +495,7 @@ const endCall = () => {
 
       <button
         onClick={startRecording}
-        disabled={!remoteReady || isRecording}
+        disabled={isMobile || !remoteReady || isRecording}
         className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
       >
         {isRecording ? "Recording..." : "Start Recording"}
@@ -459,7 +503,7 @@ const endCall = () => {
 
       <button
         onClick={stopRecording}
-        disabled={!isRecording}
+        disabled={isMobile || !isRecording}
         className="bg-yellow-600 hover:bg-yellow-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
       >
         Stop & Save

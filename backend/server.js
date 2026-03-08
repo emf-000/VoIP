@@ -68,6 +68,16 @@ io.on("connection", (socket) => {
     }
   });
 
+    socket.on("leave-room", (roomId) => {
+    console.log(`User ${socket.user.id} leaving room ${roomId}`);
+
+    socket.leave(roomId);
+
+    socket.to(roomId).emit("user-left", {
+      userId: socket.user.id,
+    });
+  });
+
   socket.on("offer", ({ roomId, offer }) => {
     socket.to(roomId).emit("offer", offer);
   });
