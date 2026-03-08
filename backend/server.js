@@ -67,7 +67,6 @@ socket.on("join-room", (roomId) => {
 
   console.log(`User ${socket.user.id} joined room ${roomId}`);
 
-  // First user becomes initiator
   if (users.length === 1) {
     socket.emit("role", { initiator: true });
   } else {
