@@ -15,8 +15,8 @@ const ICE_SERVERS: RTCConfiguration = {
         "turn:global.relay.metered.ca:443",
         "turns:global.relay.metered.ca:443?transport=tcp",
       ],
-      username: "58ac160abdcfd1a2f074a5f7",
-      credential: "fQjUYpyAwkshRceh",
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+      credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
     },
   ],
 };
@@ -247,10 +247,37 @@ export default function VideoCall({
 
     if (peer.current) {
       peer.current.close();
-      peer.current = null;
     }
 
     setRemoteReady(false);
+
+    // recreate peer for next user
+    peer.current = new RTCPeerConnection(ICE_SERVERS);
+
+    peer.current.ontrack = (event) => {
+      if (!remoteVideo.current) return;
+
+      const stream =
+        remoteVideo.current.srcObject instanceof MediaStream
+          ? remoteVideo.current.srcObject
+          : new MediaStream();
+
+      stream.addTrack(event.track);
+      remoteVideo.current.srcObject = stream;
+    };
+
+    peer.current.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", {
+          roomId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    localStream.current?.getTracks().forEach((track) => {
+      peer.current!.addTrack(track, localStream.current!);
+    });
   });
 
     return () => {

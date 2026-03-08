@@ -78,14 +78,17 @@ socket.on("join-room", (roomId) => {
   }
 });
 
-    socket.on("leave-room", (roomId) => {
-    console.log(`User ${socket.user.id} leaving room ${roomId}`);
-
+  socket.on("leave-room", (roomId) => {
     socket.leave(roomId);
 
-    socket.to(roomId).emit("user-left", {
-      userId: socket.user.id,
-    });
+    const room = io.sockets.adapter.rooms.get(roomId);
+    const remainingUsers = room ? [...room] : [];
+
+    if (remainingUsers.length === 1) {
+      io.to(remainingUsers[0]).emit("role", { initiator: true });
+    }
+
+    socket.to(roomId).emit("user-left");
   });
 
   socket.on("offer", ({ roomId, offer }) => {
@@ -101,14 +104,12 @@ socket.on("join-room", (roomId) => {
   });
 
   socket.on("disconnecting", () => {
-  socket.rooms.forEach((roomId) => {
-    if (roomId !== socket.id) {
-      socket.to(roomId).emit("user-left", {
-        userId: socket.user.id,
-      });
-    }
+    socket.rooms.forEach((roomId) => {
+      if (roomId !== socket.id) {
+        socket.to(roomId).emit("user-left");
+      }
+    });
   });
-});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user?.id);
