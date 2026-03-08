@@ -1,4 +1,4 @@
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 
 const LOCAL_SOCKET = "http://localhost:5000";
 const PROD_SOCKET = process.env.NEXT_PUBLIC_SOCKET_URL;
@@ -9,12 +9,22 @@ const SOCKET_URL =
     : PROD_SOCKET;
 
 if (!SOCKET_URL) {
-  throw new Error(
-    "NEXT_PUBLIC_SOCKET_URL is missing. Set it in Vercel Environment Variables."
-  );
+  throw new Error("Socket URL missing");
 }
 
-export const socket = io(SOCKET_URL, {
-  transports: ["websocket"],
-  autoConnect: true,
-});
+let socket: Socket | null = null;
+
+export const connectSocket = (token: string) => {
+  if (socket && socket.connected) {
+    return socket;
+  }
+
+  socket = io(SOCKET_URL, {
+    auth: { token },
+    autoConnect: true,
+  });
+
+  return socket;
+};
+
+export const getSocket = () => socket;

@@ -1,34 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { connectSocket } from "@/lib/socket";
 import VideoCall from "@/components/VideoCall";
 
 export default function RoomPage() {
-  const [roomId, setRoomId] = useState<string>("");
+  const params = useParams();
+  const roomId = params.roomId as string;
+
+  const [initiator, setInitiator] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const path = window.location.pathname;
-    const id = path.split("/room/")[1];
+    const token = localStorage.getItem("token");
 
-    if (id) {
-      console.log(" Extracted roomId:", id);
-      setRoomId(id);
-    } else {
-      console.error(" Failed to extract roomId from URL");
+    if (!token) {
+      alert("Please login first");
+      return;
     }
-  }, []);
 
-  if (!roomId) {
+    const socket = connectSocket(token);
+
+    socket.on("connect", () => {
+      console.log("Socket connected");
+      socket.emit("join-room", roomId);
+    });
+
+    socket.on("role", ({ initiator }) => {
+      console.log("ROLE RECEIVED:", initiator);
+      setInitiator(initiator);
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Socket error:", err.message);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [roomId]);
+
+  if (initiator === null) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        Loading room…
+      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        Connecting...
       </div>
     );
   }
 
-  return (
-    <div className="p-4 bg-black min-h-screen text-white">
-      <VideoCall roomId={roomId} />
-    </div>
-  );
+  return <VideoCall roomId={roomId} initiator={initiator} />;
 }

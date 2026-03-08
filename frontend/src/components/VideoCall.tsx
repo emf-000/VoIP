@@ -1,95 +1,158 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { socket } from "@/lib/socket";
+import { useRouter } from "next/navigation";
+import { getSocket } from "@/lib/socket";
 
-const TURN_URL = process.env.NEXT_PUBLIC_TURN_URL;
-const TURN_USERNAME = process.env.NEXT_PUBLIC_TURN_USERNAME;
-const TURN_CREDENTIAL = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-
+/* ================= TURN CONFIG ================= */
 const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
-    { urls: ["stun:stun.l.google.com:19302"] },
-    ...(TURN_URL && TURN_USERNAME && TURN_CREDENTIAL
-      ? [
-          {
-            urls: [TURN_URL],
-            username: TURN_USERNAME,
-            credential: TURN_CREDENTIAL,
-          },
-        ]
-      : []),
+    { urls: "stun:stun.relay.metered.ca:80" },
+    {
+      urls: [
+        "turn:global.relay.metered.ca:80",
+        "turn:global.relay.metered.ca:80?transport=tcp",
+        "turn:global.relay.metered.ca:443",
+        "turns:global.relay.metered.ca:443?transport=tcp",
+      ],
+      username: "58ac160abdcfd1a2f074a5f7",
+      credential: "fQjUYpyAwkshRceh",
+    },
   ],
 };
 
-export default function VideoCall({ roomId }: { roomId: string }) {
+export default function VideoCall({
+  roomId,
+  initiator,
+}: {
+  roomId: string;
+  initiator: boolean;
+}) {
   const localVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
 
+  const router = useRouter();
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+
   const peer = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
-
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
-  const isInitiator = useRef(false);
 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [remoteReady, setRemoteReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // ================= WEBRTC =================
   useEffect(() => {
     if (!roomId) return;
 
-    socket.emit("join-room", roomId);
+    const socket = getSocket();
+    if (!socket) return;
 
-    socket.on("role", ({ initiator }) => {
-      isInitiator.current = initiator;
-    });
+    /* ================= CREATE PEER ================= */
+    peer.current = new RTCPeerConnection(ICE_SERVERS);
 
+    peer.current.onnegotiationneeded = async () => {
+      try {
+        if (!initiator) return;
+
+        console.log("Renegotiation triggered");
+
+        const offer = await peer.current!.createOffer();
+        await peer.current!.setLocalDescription(offer);
+
+        socket.emit("offer", { roomId, offer });
+      } catch (err) {
+        console.error("Renegotiation error:", err);
+      }
+    };
+
+    peer.current.ontrack = (event) => {
+      console.log("REMOTE TRACK RECEIVED:", event.track.kind);
+
+      if (!remoteVideo.current) return;
+
+      const remoteStream =
+        remoteVideo.current.srcObject instanceof MediaStream
+          ? remoteVideo.current.srcObject
+          : new MediaStream();
+
+      remoteStream.addTrack(event.track);
+
+      remoteVideo.current.srcObject = remoteStream;
+
+      setRemoteReady(true);
+    };
+    peer.current.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", {
+          roomId,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+   peer.current.oniceconnectionstatechange = () => {
+      const state = peer.current?.iceConnectionState;
+
+      console.log("ICE State:", state);
+
+      if (state === "disconnected" || state === "failed" || state === "closed") {
+        console.log("Remote user disconnected");
+
+        if (remoteVideo.current) {
+          remoteVideo.current.srcObject = null;
+        }
+
+        peer.current?.close();
+      }
+  };
+
+    /* ================= GET LOCAL MEDIA ================= */
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
         localStream.current = stream;
-        if (localVideo.current) localVideo.current.srcObject = stream;
 
-        peer.current = new RTCPeerConnection(ICE_SERVERS);
+        if (localVideo.current) {
+          localVideo.current.srcObject = stream;
+        }
 
-        stream.getTracks().forEach((track) =>
-          peer.current!.addTrack(track, stream)
-        );
-
-        peer.current.ontrack = (event) => {
-          if (remoteVideo.current) {
-            remoteVideo.current.srcObject = event.streams[0];
-            setRemoteReady(true);
-          }
-        };
-
-        peer.current.onicecandidate = (event) => {
-          if (event.candidate) {
-            socket.emit("ice-candidate", {
-              roomId,
-              candidate: event.candidate,
-            });
-          }
-        };
+        stream.getTracks().forEach((track) => {
+          peer.current!.addTrack(track, stream);
+        });
+      })
+      .catch((err) => {
+        console.error("Media error:", err);
       });
+   
 
-    socket.on("user-joined", async () => {
-      if (!peer.current || !isInitiator.current) return;
-
-      const offer = await peer.current.createOffer();
-      await peer.current.setLocalDescription(offer);
-      socket.emit("offer", { roomId, offer });
-    });
+    /* ================= SIGNALING ================= */
 
     socket.on("offer", async (offer) => {
       if (!peer.current) return;
+
+      console.log("Received offer");
+
+      if (!localStream.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+
+        localStream.current = stream;
+
+        if (localVideo.current) {
+          localVideo.current.srcObject = stream;
+        }
+
+        stream.getTracks().forEach((track) => {
+          peer.current!.addTrack(track, stream);
+        });
+      }
 
       await peer.current.setRemoteDescription(offer);
 
@@ -100,19 +163,22 @@ export default function VideoCall({ roomId }: { roomId: string }) {
 
       const answer = await peer.current.createAnswer();
       await peer.current.setLocalDescription(answer);
+
       socket.emit("answer", { roomId, answer });
     });
 
-    socket.on("answer", async (answer) => {
-      if (!peer.current) return;
+        socket.on("answer", async (answer) => {
+          if (!peer.current) return;
 
-      await peer.current.setRemoteDescription(answer);
+          console.log("Received answer");
 
-      pendingCandidates.current.forEach((c) =>
-        peer.current?.addIceCandidate(c)
-      );
-      pendingCandidates.current = [];
-    });
+          await peer.current.setRemoteDescription(answer);
+
+          pendingCandidates.current.forEach((c) =>
+            peer.current?.addIceCandidate(c)
+          );
+          pendingCandidates.current = [];
+        });
 
     socket.on("ice-candidate", (candidate) => {
       if (peer.current?.remoteDescription) {
@@ -121,72 +187,132 @@ export default function VideoCall({ roomId }: { roomId: string }) {
         pendingCandidates.current.push(candidate);
       }
     });
+    
+    socket.on("user-joined", async () => {
+        if (!peer.current || !initiator) return;
+
+        console.log("Second user joined. Creating offer...");
+
+        const offer = await peer.current.createOffer();
+        await peer.current.setLocalDescription(offer);
+
+        socket.emit("offer", { roomId, offer });
+      });
 
     return () => {
-      socket.off("role");
-      socket.off("user-joined");
       socket.off("offer");
       socket.off("answer");
       socket.off("ice-candidate");
-      peer.current?.close();
-      peer.current = null;
+      socket.off("user-joined");
+      cleanupMedia();
     };
-  }, [roomId]);
+  }, [roomId, initiator]);
 
+  /* ================= SCREEN SHARE ================= */
   const startScreenShare = async () => {
-    if (!peer.current || !localStream.current) return;
+  if (!peer.current) return;
 
-    const screen = await navigator.mediaDevices.getDisplayMedia({
+  try {
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
-      audio: true,
     });
 
-    const screenTrack = screen.getVideoTracks()[0];
+    const screenTrack = screenStream.getVideoTracks()[0];
+    screenTrackRef.current = screenTrack;
 
     const sender = peer.current
       .getSenders()
-      .find((s) => s.track?.kind === "video");
+      .find((s) => s.track && s.track.kind === "video");
 
-    sender?.replaceTrack(screenTrack);
+    if (!sender) return;
 
-    if (localVideo.current) localVideo.current.srcObject = screen;
+    await sender.replaceTrack(screenTrack);
 
-    screenTrack.onended = () => {
-      sender?.replaceTrack(localStream.current!.getVideoTracks()[0]);
-      if (localVideo.current)
+    if (localVideo.current) {
+      localVideo.current.srcObject = screenStream;
+    }
+
+    console.log("Screen track replaced");
+
+    const socket = getSocket();
+    if (initiator && socket) {
+      const offer = await peer.current.createOffer();
+      await peer.current.setLocalDescription(offer);
+
+      socket.emit("offer", { roomId, offer });
+    }
+
+    screenTrack.onended = async () => {
+      const cameraTrack = localStream.current?.getVideoTracks()[0];
+      if (!cameraTrack) return;
+
+      await sender.replaceTrack(cameraTrack);
+
+      if (localVideo.current) {
         localVideo.current.srcObject = localStream.current;
-    };
-  };
+      }
 
+      if (initiator && socket) {
+        const offer = await peer.current!.createOffer();
+        await peer.current!.setLocalDescription(offer);
+
+        socket.emit("offer", { roomId, offer });
+      }
+    };
+  }catch (err: any) {
+    if (err.name === "NotAllowedError") {
+      console.log("User denied screen sharing permission");
+    } else {
+      console.error("Screen share error:", err);
+    }
+  }
+};
+
+  /* ================= STOP SCREEN SHARING ================= */
+const stopScreenShare = async () => {
+  if (!peer.current || !screenTrackRef.current) return;
+
+  const cameraTrack = localStream.current?.getVideoTracks()[0];
+
+  const sender = peer.current
+    .getSenders()
+    .find((s) => s.track && s.track.kind === "video");
+
+  if (!sender || !cameraTrack) return;
+
+  await sender.replaceTrack(cameraTrack);
+
+  if (localVideo.current) {
+    localVideo.current.srcObject = localStream.current;
+  }
+
+  screenTrackRef.current.stop();
+  screenTrackRef.current = null;
+
+  const socket = getSocket();
+
+  if (initiator && socket) {
+    const offer = await peer.current.createOffer();
+    await peer.current.setLocalDescription(offer);
+
+    socket.emit("offer", { roomId, offer });
+  }
+};
+
+  /* ================= RECORDING ================= */
   const startRecording = async () => {
-    if (!remoteReady || !localStream.current) {
+    if (!remoteReady) {
       alert("Wait for other user to join");
       return;
     }
 
-    const screen = await navigator.mediaDevices.getDisplayMedia({
+    const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true,
     });
 
-    const audioContext = new AudioContext();
-    const destination = audioContext.createMediaStreamDestination();
-
-    audioContext
-      .createMediaStreamSource(localStream.current)
-      .connect(destination);
-
-    audioContext
-      .createMediaStreamSource(remoteVideo.current!.srcObject as MediaStream)
-      .connect(destination);
-
-    const finalStream = new MediaStream([
-      screen.getVideoTracks()[0],
-      ...destination.stream.getAudioTracks(),
-    ]);
-
     recordedChunks.current = [];
-    mediaRecorder.current = new MediaRecorder(finalStream);
+    mediaRecorder.current = new MediaRecorder(stream);
 
     mediaRecorder.current.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunks.current.push(e.data);
@@ -197,7 +323,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "screen-recording.webm";
+      a.download = "recording.webm";
       a.click();
 
       setIsRecording(false);
@@ -212,7 +338,7 @@ export default function VideoCall({ roomId }: { roomId: string }) {
       setRecordSeconds((s) => s + 1);
     }, 1000);
 
-    screen.getVideoTracks()[0].onended = () => {
+    stream.getVideoTracks()[0].onended = () => {
       mediaRecorder.current?.stop();
     };
   };
@@ -221,44 +347,132 @@ export default function VideoCall({ roomId }: { roomId: string }) {
     mediaRecorder.current?.stop();
   };
 
-  // ================= UI =================
+  const cleanupMedia = () => {
+  console.log("Cleaning up media");
+
+  if (peer.current && peer.current.connectionState !== "closed") {
+    peer.current.getSenders().forEach((sender) => {
+      try {
+        if (sender.track) sender.replaceTrack(null);
+      } catch (err) {
+        console.log("replaceTrack skipped");
+      }
+    });
+  }
+
+  if (localStream.current) {
+    localStream.current.getTracks().forEach((track) => {
+      track.stop();
+      track.enabled = false;
+    });
+    localStream.current = null;
+  }
+
+  if (screenTrackRef.current) {
+    screenTrackRef.current.stop();
+    screenTrackRef.current = null;
+  }
+
+  if (remoteVideo.current?.srcObject) {
+    const remoteStream = remoteVideo.current.srcObject as MediaStream;
+    remoteStream.getTracks().forEach((track) => track.stop());
+  }
+
+  if (localVideo.current) {
+    localVideo.current.pause();
+    localVideo.current.srcObject = null;
+  }
+
+  if (remoteVideo.current) {
+    remoteVideo.current.pause();
+    remoteVideo.current.srcObject = null;
+  }
+
+  peer.current?.close();
+  peer.current = null;
+};
+
+const endCall = () => {
+  const socket = getSocket();
+
+  if (socket) socket.disconnect();
+
+  cleanupMedia();
+
+  router.push("/");
+};
+
+  /* ================= UI ================= */
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col p-4">
-      {isRecording && (
-        <div className="flex items-center justify-center gap-2 text-red-500 font-semibold mb-2">
-          <span className="animate-pulse text-2xl">●</span>
-          Recording… {recordSeconds}s
-        </div>
-      )}
+  <div className="min-h-screen bg-black text-white flex flex-col p-3 sm:p-4">
 
-      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <video ref={localVideo} autoPlay muted playsInline className="rounded" />
-        <video ref={remoteVideo} autoPlay playsInline className="rounded" />
+    {isRecording && (
+      <div className="text-center text-red-500 mb-2 text-sm sm:text-base">
+        ● Recording... {recordSeconds}s
       </div>
+    )}
 
-      <div className="flex gap-3 justify-center mt-4">
-        <button onClick={startScreenShare}>Share Screen</button>
+    {/* Video Container */}
+    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
 
-        <button
-          onClick={startRecording}
-          disabled={!remoteReady || isRecording}
-          className={`px-4 py-2 rounded ${
-            isRecording
-              ? "bg-red-800 cursor-not-allowed"
-              : "bg-red-600 hover:bg-red-700"
-          }`}
-        >
-          {isRecording ? "Recording…" : "Start Recording"}
-        </button>
+      <video
+        ref={localVideo}
+        autoPlay
+        muted
+        playsInline
+        className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
+      />
 
-        <button
-          onClick={stopRecording}
-          disabled={!isRecording}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded disabled:bg-gray-600"
-        >
-          Stop & Save
-        </button>
-      </div>
+      <video
+        ref={remoteVideo}
+        autoPlay
+        playsInline
+        className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
+      />
+
     </div>
-  );
+
+    {/* Controls */}
+    <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mt-4">
+
+      <button
+        onClick={startScreenShare}
+        className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+      >
+        Share Screen
+      </button>
+
+      <button
+        onClick={stopScreenShare}
+        className="bg-gray-700 hover:bg-gray-600 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+      >
+        Stop Sharing
+      </button>
+
+      <button
+        onClick={startRecording}
+        disabled={!remoteReady || isRecording}
+        className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
+      >
+        {isRecording ? "Recording..." : "Start Recording"}
+      </button>
+
+      <button
+        onClick={stopRecording}
+        disabled={!isRecording}
+        className="bg-yellow-600 hover:bg-yellow-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
+      >
+        Stop & Save
+      </button>
+
+      <button
+        onClick={endCall}
+        className="bg-red-600 hover:bg-red-700 px-4 sm:px-5 py-2 rounded text-sm sm:text-base"
+      >
+        End Call
+      </button>
+
+    </div>
+  </div>
+);
 }

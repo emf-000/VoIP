@@ -1,19 +1,42 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import LogoutButton from "@/components/LogoutButton";
 
 export default function Home() {
   const [room, setRoom] = useState("");
+  const [checking, setChecking] = useState(true);
   const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      router.push("/login");
+    } else {
+      setChecking(false);
+    }
+  }, []);
 
   const joinRoom = () => {
     if (!room.trim()) return;
     router.push(`/room/${room}`);
   };
 
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        Checking authentication...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white">
+        <div className="absolute top-6 right-6">
+            <LogoutButton />
+          </div>
       <div className="w-full max-w-md bg-gray-800/80 backdrop-blur rounded-xl shadow-xl p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold">
