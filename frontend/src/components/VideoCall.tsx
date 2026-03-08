@@ -448,12 +448,6 @@ const endCall = () => {
       </div>
     )}
 
-    {isMobile && (
-      <div className="text-center text-yellow-400 mb-2 text-sm">
-        Screen sharing and recording are available on desktop only
-      </div>
-    )}
-
     {/* Video Container */}
     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
 
@@ -477,45 +471,46 @@ const endCall = () => {
     {/* Controls */}
     <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mt-4">
 
-      <button
-        onClick={startScreenShare}
-        disabled={isMobile}
-        className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
-      >
-        Share Screen
-      </button>
+      {!isMobile && (
+        <>
+          <button
+            onClick={startScreenShare}
+            className="bg-blue-600 hover:bg-blue-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+          >
+            Share Screen
+          </button>
 
-      <button
-        onClick={stopScreenShare}
-        disabled={isMobile}
-        className="bg-gray-700 hover:bg-gray-600 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
-      >
-        Stop Sharing
-      </button>
+          <button
+            onClick={stopScreenShare}
+            className="bg-gray-700 hover:bg-gray-600 px-3 sm:px-4 py-2 rounded text-sm sm:text-base"
+          >
+            Stop Sharing
+          </button>
 
-      <button
-        onClick={startRecording}
-        disabled={isMobile || !remoteReady || isRecording}
-        className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
-      >
-        {isRecording ? "Recording..." : "Start Recording"}
-      </button>
+          <button
+            onClick={startRecording}
+            disabled={!remoteReady || isRecording}
+            className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
+          >
+            {isRecording ? "Recording..." : "Start Recording"}
+          </button>
 
-      <button
-        onClick={stopRecording}
-        disabled={isMobile || !isRecording}
-        className="bg-yellow-600 hover:bg-yellow-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
-      >
-        Stop & Save
-      </button>
+          <button
+            onClick={stopRecording}
+            disabled={!isRecording}
+            className="bg-yellow-600 hover:bg-yellow-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
+          >
+            Stop & Save
+          </button>
+        </>
+      )}
 
       <button
         onClick={endCall}
-        className="bg-red-600 hover:bg-red-700 px-4 sm:px-5 py-2 rounded text-sm sm:text-base"
+        className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded text-sm sm:text-base"
       >
         End Call
       </button>
-
     </div>
   </div>
 );
