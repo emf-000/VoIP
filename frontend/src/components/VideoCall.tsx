@@ -56,7 +56,6 @@ export default function VideoCall({
     const socket = getSocket();
     if (!socket) return;
 
-    socket.emit("join-room", roomId);
 
     /* ================= CREATE PEER ================= */
     peer.current = new RTCPeerConnection(ICE_SERVERS);
@@ -64,8 +63,6 @@ export default function VideoCall({
     peer.current.onnegotiationneeded = async () => {
       try {
         if (!initiator) return;
-        if (!peer.current) return;
-        if (peer.current.signalingState !== "stable") return;
 
         console.log("Renegotiation triggered");
 
@@ -160,10 +157,6 @@ export default function VideoCall({
         });
       }
 
-        if (peer.current.signalingState !== "stable") {
-          console.log("Skipping offer, state:", peer.current.signalingState);
-          return;
-        }
 
       await peer.current.setRemoteDescription(offer);
 
