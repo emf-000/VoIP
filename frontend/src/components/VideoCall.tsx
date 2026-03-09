@@ -37,6 +37,7 @@ export default function VideoCall({
   const peer = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  const isMakingOffer = useRef(false);
 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
@@ -62,15 +63,21 @@ export default function VideoCall({
     peer.current.onnegotiationneeded = async () => {
       try {
         if (!initiator) return;
+        if (!peer.current) return;
 
-        console.log("Renegotiation triggered");
+        if (isMakingOffer.current) return;
 
-        const offer = await peer.current!.createOffer();
-        await peer.current!.setLocalDescription(offer);
+        isMakingOffer.current = true;
+
+        const offer = await peer.current.createOffer();
+        await peer.current.setLocalDescription(offer);
 
         socket.emit("offer", { roomId, offer });
+
       } catch (err) {
-        console.error("Renegotiation error:", err);
+        console.error("Negotiation error:", err);
+      } finally {
+        isMakingOffer.current = false;
       }
     };
 
@@ -136,6 +143,14 @@ export default function VideoCall({
 
     socket.on("offer", async (offer) => {
       if (!peer.current) return;
+
+      const offerCollision =
+        isMakingOffer.current || peer.current.signalingState !== "stable";
+
+      if (offerCollision) {
+        console.log("Offer collision detected");
+        return;
+      }
 
       console.log("Received offer");
 
@@ -251,7 +266,6 @@ export default function VideoCall({
 
     setRemoteReady(false);
 
-    // recreate peer for next user
     peer.current = new RTCPeerConnection(ICE_SERVERS);
 
     peer.current.ontrack = (event) => {
