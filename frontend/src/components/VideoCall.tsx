@@ -37,7 +37,6 @@ export default function VideoCall({
   const peer = useRef<RTCPeerConnection | null>(null);
   const localStream = useRef<MediaStream | null>(null);
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
-  const isMakingOffer = useRef(false);
 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
@@ -57,6 +56,8 @@ export default function VideoCall({
     const socket = getSocket();
     if (!socket) return;
 
+    socket.emit("join-room", roomId);
+
     /* ================= CREATE PEER ================= */
     peer.current = new RTCPeerConnection(ICE_SERVERS);
 
@@ -64,20 +65,16 @@ export default function VideoCall({
       try {
         if (!initiator) return;
         if (!peer.current) return;
+        if (peer.current.signalingState !== "stable") return;
 
-        if (isMakingOffer.current) return;
+        console.log("Renegotiation triggered");
 
-        isMakingOffer.current = true;
-
-        const offer = await peer.current.createOffer();
-        await peer.current.setLocalDescription(offer);
+        const offer = await peer.current!.createOffer();
+        await peer.current!.setLocalDescription(offer);
 
         socket.emit("offer", { roomId, offer });
-
       } catch (err) {
-        console.error("Negotiation error:", err);
-      } finally {
-        isMakingOffer.current = false;
+        console.error("Renegotiation error:", err);
       }
     };
 
@@ -144,14 +141,6 @@ export default function VideoCall({
     socket.on("offer", async (offer) => {
       if (!peer.current) return;
 
-      const offerCollision =
-        isMakingOffer.current || peer.current.signalingState !== "stable";
-
-      if (offerCollision) {
-        console.log("Offer collision detected");
-        return;
-      }
-
       console.log("Received offer");
 
       if (!localStream.current) {
@@ -170,6 +159,11 @@ export default function VideoCall({
           peer.current!.addTrack(track, stream);
         });
       }
+
+        if (peer.current.signalingState !== "stable") {
+          console.log("Skipping offer, state:", peer.current.signalingState);
+          return;
+        }
 
       await peer.current.setRemoteDescription(offer);
 
