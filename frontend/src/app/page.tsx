@@ -34,9 +34,15 @@ export default function Home() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-gray-900 via-black to-gray-900 text-white">
-        <div className="absolute top-6 right-6">
-            <LogoutButton />
-          </div>
+      <div className="absolute top-6 right-6 flex gap-3">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 transition"
+        >
+          Dashboard
+        </button>
+        <LogoutButton />
+      </div>
       <div className="w-full max-w-md bg-gray-800/80 backdrop-blur rounded-xl shadow-xl p-6 sm:p-8 space-y-6">
         <div className="text-center space-y-2">
           <h1 className="text-2xl sm:text-3xl font-bold">

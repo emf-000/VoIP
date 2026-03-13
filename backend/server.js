@@ -8,12 +8,17 @@ import { Server } from "socket.io";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import callRoutes from "./routes/callRoutes.js";
+import Call from "./models/Call.js";
 
 const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/call", callRoutes);
 
 const server = http.createServer(app);
 
@@ -47,7 +52,7 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.user.id);
 
-socket.on("join-room", (roomId) => {
+socket.on("join-room", async (roomId) => {
   if (!roomId) return;
 
   socket.join(roomId);
@@ -55,15 +60,32 @@ socket.on("join-room", (roomId) => {
   const room = io.sockets.adapter.rooms.get(roomId);
   const users = room ? [...room] : [];
 
-  if (users.length > 2) {
-  console.log("Room full:", roomId);
+  /* SAVE CALL START */
+  let call = await Call.findOne({ roomId });
 
-  socket.emit("room-full");
+  if (!call) {
+    call = await Call.create({
+      roomId,
+      users: [socket.user.id],
+      startedAt: new Date(),
+    });
+  } else {
+    const alreadyJoined = call.users.some(
+      (u) => u.toString() === socket.user.id
+    );
 
-  socket.leave(roomId);
+    if (!alreadyJoined) {
+      call.users.push(socket.user.id);
+      await call.save();
+    }
+  }
 
-  return;
-}
+  if (users.length > 6) {
+    console.log("Room full:", roomId);
+    socket.emit("room-full");
+    socket.leave(roomId);
+    return;
+  }
 
   console.log(`User ${socket.user.id} joined room ${roomId}`);
 
@@ -78,7 +100,11 @@ socket.on("join-room", (roomId) => {
   }
 });
 
-  socket.on("leave-room", (roomId) => {
+  socket.on("leave-room", async (roomId) => {
+    await Call.findOneAndUpdate(
+    { roomId },
+    { endedAt: new Date() }
+  );
     socket.leave(roomId);
 
     const room = io.sockets.adapter.rooms.get(roomId);
@@ -103,13 +129,18 @@ socket.on("join-room", (roomId) => {
     socket.to(roomId).emit("ice-candidate", candidate);
   });
 
-  socket.on("disconnecting", () => {
-    socket.rooms.forEach((roomId) => {
-      if (roomId !== socket.id) {
-        socket.to(roomId).emit("user-left");
-      }
-    });
-  });
+socket.on("disconnecting", async () => {
+  for (const roomId of socket.rooms) {
+    if (roomId !== socket.id) {
+      await Call.findOneAndUpdate(
+        { roomId },
+        { endedAt: new Date() }
+      );
+
+      socket.to(roomId).emit("user-left");
+    }
+  }
+});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user?.id);
