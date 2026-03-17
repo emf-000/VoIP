@@ -98,13 +98,20 @@ export default function Dashboard() {
 
             let duration = "Active";
 
-            if (end) {
-              const diff = Math.floor(
-                (end.getTime() - start.getTime()) / 1000
-              );
-              const minutes = Math.floor(diff / 60);
+            if (end && start) {
+              const diff = Math.floor((end.getTime() - start.getTime()) / 1000);
+
+              const hours = Math.floor(diff / 3600);
+              const minutes = Math.floor((diff % 3600) / 60);
               const seconds = diff % 60;
-              duration = `${minutes}m ${seconds}s`;
+
+              if (hours > 0) {
+                duration = `${hours}h ${minutes}m ${seconds}s`;
+              } else if (minutes > 0) {
+                duration = `${minutes}m ${seconds}s`;
+              } else {
+                duration = `${seconds}s`;
+              }
             }
 
             return (

@@ -27,10 +27,8 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"],
   },
-
 });
 
-/* SOCKET AUTH MIDDLEWARE */
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
@@ -41,70 +39,70 @@ io.use((socket, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    socket.user = decoded; 
+    socket.user = decoded;
     next();
   } catch (error) {
     next(new Error("Invalid token"));
   }
 });
 
-/* SOCKET CONNECTION */
+const userSocketMap = {};
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.user.id);
 
-socket.on("join-room", async (roomId) => {
-  if (!roomId) return;
+userSocketMap[socket.user.id] = socket.id;
 
-  socket.join(roomId);
+  socket.on("join-room", async (roomId) => {
+    if (!roomId) return;
 
-  const room = io.sockets.adapter.rooms.get(roomId);
-  const users = room ? [...room] : [];
+    socket.join(roomId);
 
-  /* SAVE CALL START */
-  let call = await Call.findOne({ roomId });
+    const room = io.sockets.adapter.rooms.get(roomId);
+    const users = room ? [...room] : [];
 
-  if (!call) {
-    call = await Call.create({
-      roomId,
-      users: [socket.user.id],
-      startedAt: new Date(),
-    });
-  } else {
-    const alreadyJoined = call.users.some(
-      (u) => u.toString() === socket.user.id
-    );
+    let call = await Call.findOne({ roomId });
 
-    if (!alreadyJoined) {
-      call.users.push(socket.user.id);
-      await call.save();
+    if (!call) {
+      call = await Call.create({
+        roomId,
+        users: [socket.user.id],
+        startedAt: new Date(),
+      });
+    } else {
+      const alreadyJoined = call.users.some(
+        (u) => u.toString() === socket.user.id
+      );
+
+      if (!alreadyJoined) {
+        call.users.push(socket.user.id);
+        await call.save();
+      }
     }
-  }
 
-  if (users.length > 6) {
-    console.log("Room full:", roomId);
-    socket.emit("room-full");
-    socket.leave(roomId);
-    return;
-  }
+    if (users.length > 4) {
+      console.log("Room full:", roomId);
+      socket.emit("room-full");
+      socket.leave(roomId);
+      return;
+    }
 
-  console.log(`User ${socket.user.id} joined room ${roomId}`);
+    console.log(`User ${socket.user.id} joined room ${roomId}`);
 
-  if (users.length === 1) {
-    socket.emit("role", { initiator: true });
-  } else {
-    socket.emit("role", { initiator: false });
+    if (users.length === 1) {
+      socket.emit("role", { initiator: true });
+    } else {
+      socket.emit("role", { initiator: false });
 
-    socket.to(roomId).emit("user-joined", {
-      userId: socket.user.id,
-    });
-  }
-});
+      socket.to(roomId).emit("user-joined", {
+        userId: socket.user.id,
+      });
+    }
+  });
 
   socket.on("leave-room", async (roomId) => {
-    await Call.findOneAndUpdate(
-    { roomId },
-    { endedAt: new Date() }
-  );
+    await Call.findOneAndUpdate({ roomId }, { endedAt: new Date() });
+
     socket.leave(roomId);
 
     const room = io.sockets.adapter.rooms.get(roomId);
@@ -114,40 +112,62 @@ socket.on("join-room", async (roomId) => {
       io.to(remainingUsers[0]).emit("role", { initiator: true });
     }
 
-    socket.to(roomId).emit("user-left");
+    socket.to(roomId).emit("user-left", {
+      userId: socket.user.id,
+    });
   });
 
-  socket.on("offer", ({ roomId, offer }) => {
-    socket.to(roomId).emit("offer", offer);
+  socket.on("offer", ({ offer, to }) => {
+    const socketId = userSocketMap[to];
+    if (!socketId) return;
+
+    socket.to(socketId).emit("offer", {
+      offer,
+      from: socket.user.id,
+    });
   });
 
-  socket.on("answer", ({ roomId, answer }) => {
-    socket.to(roomId).emit("answer", answer);
+  socket.on("answer", ({ answer, to }) => {
+    const socketId = userSocketMap[to];
+    if (!socketId) return;
+
+    socket.to(socketId).emit("answer", {
+      answer,
+      from: socket.user.id,
+    });
   });
 
-  socket.on("ice-candidate", ({ roomId, candidate }) => {
-    socket.to(roomId).emit("ice-candidate", candidate);
+  socket.on("ice-candidate", ({ candidate, to }) => {
+    const socketId = userSocketMap[to];
+    if (!socketId) return;
+
+    socket.to(socketId).emit("ice-candidate", {
+      candidate,
+      from: socket.user.id,
+    });
   });
 
-socket.on("disconnecting", async () => {
-  for (const roomId of socket.rooms) {
-    if (roomId !== socket.id) {
-      await Call.findOneAndUpdate(
-        { roomId },
-        { endedAt: new Date() }
-      );
+  socket.on("disconnecting", async () => {
+    for (const roomId of socket.rooms) {
+      if (roomId !== socket.id) {
+        await Call.findOneAndUpdate(
+          { roomId },
+          { endedAt: new Date() }
+        );
 
-      socket.to(roomId).emit("user-left");
+        socket.to(roomId).emit("user-left", {
+          userId: socket.user.id,
+        });
+      }
     }
-  }
-});
+  });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user?.id);
+    delete userSocketMap[socket.user?.id];
   });
 });
 
-/*  DATABASE CONNECTION */
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URL);

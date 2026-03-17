@@ -21,6 +21,13 @@ export default function RoomPage() {
 
     const socket = connectSocket(token);
 
+    if (!socket) return;
+
+    if (socket.connected) {
+      console.log("Socket already connected");
+      socket.emit("join-room", roomId);
+    }
+
     socket.on("connect", () => {
       console.log("Socket connected");
       socket.emit("join-room", roomId);
@@ -36,7 +43,9 @@ export default function RoomPage() {
     });
 
     return () => {
-      socket.disconnect();
+      socket.off("connect");
+      socket.off("role");
+      socket.off("connect_error");
     };
   }, [roomId]);
 

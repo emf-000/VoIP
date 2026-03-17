@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { connectSocket } from "@/lib/socket";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,6 +35,8 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("token", data.token);
+
+      connectSocket(data.token);
 
       router.push("/");
     } catch (error) {

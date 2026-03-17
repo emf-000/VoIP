@@ -15,13 +15,24 @@ if (!SOCKET_URL) {
 let socket: Socket | null = null;
 
 export const connectSocket = (token: string) => {
-  if (socket && socket.connected) {
+  if (!token) {
+    console.error("Socket connection failed: token missing");
+    return null;
+  }
+
+  if (socket?.connected) {
     return socket;
   }
 
   socket = io(SOCKET_URL, {
-    auth: { token },
-    autoConnect: true,
+    transports: ["websocket"],
+    auth: {
+      token,
+    },
+  });
+
+  socket.on("connect_error", (err) => {
+    console.error("Socket error:", err.message);
   });
 
   return socket;
