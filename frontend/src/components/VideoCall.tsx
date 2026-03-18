@@ -440,31 +440,28 @@ return (
     </div>
 
     {/* Video Container */}
-<div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 auto-rows-fr">
+    <div className="flex-1 grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
 
-  {/* Local Video */}
-  <video
-    ref={localVideo}
-    autoPlay
-    muted
-    playsInline
-    className="w-full h-full aspect-video bg-gray-900 rounded-lg object-cover"
-  />
+      <video
+        ref={localVideo}
+        autoPlay
+        muted
+        playsInline
+        className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
+      />
 
-  {/* Remote Videos */}
-  {Object.entries(remoteStreams).map(([id, stream]) => (
-    <video
-      key={id}
-      autoPlay
-      playsInline
-      ref={(video) => {
-        if (video) video.srcObject = stream;
-      }}
-      className="w-full h-full aspect-video bg-gray-900 rounded-lg object-cover"
-    />
-  ))}
-
-</div>
+      {Object.entries(remoteStreams).map(([id, stream]) => (
+        <video
+          key={id}
+          autoPlay
+          playsInline
+          ref={(video) => {
+            if (video) video.srcObject = stream;
+          }}
+          className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
+        />
+      ))}
+    </div>
 
   <canvas ref={canvasRef} width={1920} height={1080} style={{ display: "none" }} />
 
