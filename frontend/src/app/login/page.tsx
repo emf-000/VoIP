@@ -35,6 +35,7 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("token", data.token);
+      localStorage.setItem("loginTime", Date.now().toString())
 
       connectSocket(data.token);
 
