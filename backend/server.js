@@ -50,8 +50,18 @@ const userSocketMap = {};
 
 io.on("connection", (socket) => {
   console.log("User connected:", socket.user.id);
+  userSocketMap[socket.user.id] = socket.id;
+  
+   socket.on("send-message", ({ roomId, message }) => {
+    if (!roomId || !message) return;
 
-userSocketMap[socket.user.id] = socket.id;
+    io.to(roomId).emit("receive-message", {
+      message,
+      senderId: socket.id,
+      senderName: socket.user.name || "User",
+      createdAt: new Date(),
+    });
+  });
 
   socket.on("join-room", async (roomId) => {
     if (!roomId) return;
@@ -61,7 +71,7 @@ userSocketMap[socket.user.id] = socket.id;
     const room = io.sockets.adapter.rooms.get(roomId);
     const users = room ? [...room] : [];
 
-    let call = await Call.findOne({ roomId });
+    let call = await Call.findOne({ roomId, endedAt: null });
 
     if (!call) {
       call = await Call.create({
@@ -101,21 +111,27 @@ userSocketMap[socket.user.id] = socket.id;
   });
 
   socket.on("leave-room", async (roomId) => {
-    await Call.findOneAndUpdate({ roomId }, { endedAt: new Date() });
+  socket.leave(roomId);
 
-    socket.leave(roomId);
+  const room = io.sockets.adapter.rooms.get(roomId);
+  const remainingCount = room ? room.size : 0;
 
-    const room = io.sockets.adapter.rooms.get(roomId);
-    const remainingUsers = room ? [...room] : [];
+  if (remainingCount === 0) {
+    await Call.findOneAndUpdate(
+      { roomId, endedAt: null },
+      { endedAt: new Date() }
+    );
+  }
 
-    if (remainingUsers.length === 1) {
-      io.to(remainingUsers[0]).emit("role", { initiator: true });
-    }
+  if (remainingCount === 1) {
+    const remainingUser = [...room][0];
+    io.to(remainingUser).emit("role", { initiator: true });
+  }
 
-    socket.to(roomId).emit("user-left", {
-      userId: socket.user.id,
-    });
+  socket.to(roomId).emit("user-left", {
+    userId: socket.user.id,
   });
+});
 
   socket.on("offer", ({ offer, to }) => {
     const socketId = userSocketMap[to];
@@ -147,20 +163,27 @@ userSocketMap[socket.user.id] = socket.id;
     });
   });
 
-  socket.on("disconnecting", async () => {
-    for (const roomId of socket.rooms) {
-      if (roomId !== socket.id) {
+ socket.on("disconnecting", async () => {
+  for (const roomId of socket.rooms) {
+    if (roomId !== socket.id) {
+
+      const room = io.sockets.adapter.rooms.get(roomId);
+
+      const remainingCount = room ? room.size - 1 : 0;
+
+      if (remainingCount === 0) {
         await Call.findOneAndUpdate(
-          { roomId },
+          { roomId, endedAt: null },
           { endedAt: new Date() }
         );
-
-        socket.to(roomId).emit("user-left", {
-          userId: socket.user.id,
-        });
       }
+
+      socket.to(roomId).emit("user-left", {
+        userId: socket.user.id,
+      });
     }
-  });
+  }
+});
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.user?.id);
@@ -184,3 +207,4 @@ server.listen(PORT, async () => {
   await connectDB();
   console.log("Server running on port", PORT);
 });
+

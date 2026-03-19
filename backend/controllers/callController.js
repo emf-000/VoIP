@@ -3,7 +3,7 @@ import Call from "../models/Call.js";
 export const getCallHistory = async (req, res) => {
   const calls = await Call.find({
     users: req.user.id
-  }).sort({ createdAt: -1 });
+  }).sort({ startedAt: -1 });
 
   res.json(calls);
 };

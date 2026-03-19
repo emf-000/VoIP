@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+type ChatMessage = {
+  message: string;
+  senderId: string;
+  senderName: string;
+  createdAt: string | Date;
+};
 import { useRouter } from "next/navigation";
 import { getSocket } from "@/lib/socket";
 
@@ -38,6 +44,11 @@ export default function VideoCall({
   const candidateQueue = useRef<{ [key: string]: RTCIceCandidateInit[] }>({});
   const peers = useRef<{ [key: string]: RTCPeerConnection }>({});
   const [remoteStreams, setRemoteStreams] = useState<{ [key: string]: MediaStream }>({});
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState<string>("");
+  const [showChat, setShowChat] = useState<boolean>(false);
+  const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
 
   const createPeer = (userId: string, socket: any) => {
 
@@ -114,7 +125,6 @@ export default function VideoCall({
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const recordedChunks = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-
   const [isRecording, setIsRecording] = useState(false);
 
   const isMobile =
@@ -126,6 +136,10 @@ export default function VideoCall({
 
     const socket = getSocket();
     if (!socket) return;
+
+    socket.on("connect", () => {
+      setUserId(socket.id);
+    });
      const init = async () => {
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -177,7 +191,7 @@ export default function VideoCall({
        return;
       }
 
-await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
   if (candidateQueue.current[from]) {
     for (const candidate of candidateQueue.current[from]) {
@@ -265,7 +279,10 @@ socket.on("user-joined", ({ userId }) => {
       delete updated[userId];
       return updated;
     });
+  });
 
+  socket.on("receive-message", (msg: ChatMessage) => {
+    setMessages((prev) => [...prev, msg]);
   });
 
 
@@ -276,6 +293,7 @@ socket.on("user-joined", ({ userId }) => {
     socket.off("user-joined");
     socket.off("room-full");
     socket.off("user-left");
+    socket.off("receive-message");
 
     cleanupMedia();
   };
@@ -427,6 +445,20 @@ const endCall = () => {
   }, 100);
 };
 
+const sendMessage = () => {
+  if (!input.trim()) return;
+
+  const socket = getSocket();
+  if (!socket) return;
+
+  socket.emit("send-message", {
+    roomId,
+    message: input,
+  });
+
+  setInput("");
+};
+
   /* ================= UI ================= */
 return (
   <div className="min-h-screen bg-black text-white flex flex-col p-3 sm:p-4">
@@ -440,28 +472,40 @@ return (
     </div>
 
     {/* Video Container */}
-    <div className="flex-1 grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
+  <div className="flex-1 flex flex-wrap justify-center items-center gap-3 p-2">
 
-      <video
-        ref={localVideo}
-        autoPlay
-        muted
-        playsInline
-        className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
-      />
+    <video
+      ref={localVideo}
+      autoPlay
+      muted
+      playsInline
+      className="
+        w-[45%] sm:w-[40%] md:w-[220px] lg:w-[260px]
+        aspect-video
+        bg-gray-900 rounded-lg object-cover
+      "
+    />
 
-      {Object.entries(remoteStreams).map(([id, stream]) => (
+    {Object.entries(remoteStreams).map(([id, stream]) => (
         <video
           key={id}
           autoPlay
           playsInline
           ref={(video) => {
-            if (video) video.srcObject = stream;
+            if (!video) return;
+            videoRefs.current[id] = video;
+            if (video.srcObject !== stream) {
+              video.srcObject = stream;
+            }
           }}
-          className="w-full h-[35vh] md:h-full bg-gray-900 rounded-lg object-cover"
+          className="
+            w-[45%] sm:w-[40%] md:w-[220px] lg:w-[260px]
+            aspect-video
+            bg-gray-900 rounded-lg object-cover
+          "
         />
       ))}
-    </div>
+  </div>
 
   <canvas ref={canvasRef} width={1920} height={1080} style={{ display: "none" }} />
 
@@ -490,12 +534,88 @@ return (
       )}
 
       <button
+        onClick={() => setShowChat((prev) => !prev)}
+        className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded"
+      >
+        {showChat ? "Close Chat" : "Open Chat"}
+      </button>
+
+      <button
         onClick={endCall}
         className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded text-sm sm:text-base"
       >
         End Call
       </button>
     </div>
+
+  {showChat && (
+  <div className="
+    fixed z-50 bg-gray-900 text-white flex flex-col shadow-lg
+    w-full h-full top-0 left-0
+    sm:w-80 sm:right-0 sm:left-auto sm:h-full
+  ">
+
+    {/* Header */}
+    <div className="flex items-center justify-between p-3 border-b border-gray-700">
+      <span className="text-lg font-semibold">Chat</span>
+      <button
+        onClick={() => setShowChat(false)}
+        className="text-red-400"
+      >
+        ✕
+      </button>
+    </div>
+
+    {/* Messages */}
+    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      {messages.map((msg, i) => {
+        const isMe = msg.senderId === userId;
+
+        return (
+          <div
+            key={i}
+            className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`
+                max-w-[75%] px-3 py-2 rounded-lg text-sm
+                ${isMe
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-white"}
+              `}
+            >
+              {!isMe && (
+                <div className="text-xs text-green-400 font-semibold mb-1">
+                  {msg.senderName}
+                </div>
+              )}
+              {msg.message}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* Input */}
+    <div className="flex gap-2 p-2 border-t border-gray-700">
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") sendMessage();
+        }}
+        className="flex-1 px-3 py-2 rounded bg-black border border-gray-700 text-sm"
+        placeholder="Type message..."
+      />
+      <button
+        onClick={sendMessage}
+        className="bg-blue-600 px-4 py-2 rounded text-sm"
+      >
+        Send
+      </button>
+    </div>
+  </div>
+)}
   </div>
 );
 }

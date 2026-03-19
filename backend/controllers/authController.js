@@ -15,7 +15,7 @@ export const register = async (req, res) => {
   });
 
   const token = jwt.sign(
-    { id: user._id },
+    { id: user._id, name: user.name },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
@@ -34,7 +34,7 @@ export const login = async (req, res) => {
   if (!isMatch) return res.status(400).json({ message: "Wrong password" });
 
   const token = jwt.sign(
-    { id: user._id },
+    { id: user._id, name: user.name },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
