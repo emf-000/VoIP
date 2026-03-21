@@ -49,6 +49,7 @@ export default function VideoCall({
   const [input, setInput] = useState<string>("");
   const [showChat, setShowChat] = useState<boolean>(false);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const createPeer = (userId: string, socket: any) => {
 
@@ -299,7 +300,13 @@ socket.on("user-joined", ({ userId }) => {
   };
   }, [roomId, initiator]);
 
-
+  useEffect(() => {
+    if (showChat) {
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView();
+      }, 100);
+    }
+  }, [messages, showChat]);
 
   /* ================= RECORDING ================= */
 const startRecording = async () => {
@@ -461,7 +468,7 @@ const sendMessage = () => {
 
   /* ================= UI ================= */
 return (
-  <div className="min-h-screen bg-black text-white flex flex-col p-3 sm:p-4">
+  <div className="min-h-screen bg-black text-white flex flex-col p-3 sm:p-4 overflow-hidden">
 
     <div
       ref={recordingTextRef}
@@ -479,8 +486,9 @@ return (
       autoPlay
       muted
       playsInline
+      style={{ minWidth: "200px" }}
       className="
-        w-[45%] sm:w-[40%] md:w-[220px] lg:w-[260px]
+        w-[45%] sm:w-[40%] md:w-[40%] lg:w-[35%]
         aspect-video
         bg-gray-900 rounded-lg object-cover
       "
@@ -491,6 +499,7 @@ return (
           key={id}
           autoPlay
           playsInline
+          style={{ minWidth: "200px" }}
           ref={(video) => {
             if (!video) return;
             videoRefs.current[id] = video;
@@ -499,7 +508,7 @@ return (
             }
           }}
           className="
-            w-[45%] sm:w-[40%] md:w-[220px] lg:w-[260px]
+            w-[45%] sm:w-[40%] md:w-[40%] lg:w-[35%]
             aspect-video
             bg-gray-900 rounded-lg object-cover
           "
@@ -594,6 +603,7 @@ return (
           </div>
         );
       })}
+      <div ref={bottomRef} />
     </div>
 
     {/* Input */}
