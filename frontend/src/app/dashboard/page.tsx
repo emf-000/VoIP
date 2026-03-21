@@ -40,10 +40,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-black text-white px-4 py-6 sm:px-6">
 
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto w-full space-y-8">
 
         {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h1 className="text-2xl font-bold">Dashboard</h1>
 
           <button
@@ -56,9 +56,7 @@ export default function Dashboard() {
 
         {/* USER PROFILE */}
         <div className="bg-gray-800 p-6 rounded-lg">
-
           <h2 className="text-lg font-semibold mb-4">User Profile</h2>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
             <div className="bg-gray-900 p-4 rounded">
@@ -117,7 +115,8 @@ export default function Dashboard() {
             return (
               <div
                 key={call._id}
-                className="bg-gray-800 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+                className="bg-gray-800 p-4 rounded-lg flex flex-col 
+                md:flex-row md:items-center md:justify-between gap-4"
               >
 
                 {/* CALL INFO */}

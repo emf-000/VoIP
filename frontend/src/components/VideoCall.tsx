@@ -488,7 +488,7 @@ return (
       playsInline
       style={{ minWidth: "200px" }}
       className="
-        w-[45%] sm:w-[40%] md:w-[40%] lg:w-[35%]
+        w-[45%] max-w-[500px]
         aspect-video
         bg-gray-900 rounded-lg object-cover
       "
@@ -508,7 +508,7 @@ return (
             }
           }}
           className="
-            w-[45%] sm:w-[40%] md:w-[40%] lg:w-[35%]
+            w-[45%] max-w-[500px]
             aspect-video
             bg-gray-900 rounded-lg object-cover
           "
@@ -560,8 +560,7 @@ return (
   {showChat && (
   <div className="
     fixed z-50 bg-gray-900 text-white flex flex-col shadow-lg
-    w-full h-full top-0 left-0
-    sm:w-80 sm:right-0 sm:left-auto sm:h-full
+    w-full h-[40%] bottom-0 left-0
   ">
 
     {/* Header */}
