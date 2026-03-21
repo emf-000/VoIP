@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AutoLogout from "@/components/AutoLogout";
@@ -17,6 +17,12 @@ export const metadata: Metadata = {
   title: "VoIP Video Call App",
   description: "Real-time video calling with chat",
 };
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 
 export default function RootLayout({
   children,
