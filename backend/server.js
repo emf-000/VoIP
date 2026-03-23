@@ -13,7 +13,14 @@ import callRoutes from "./routes/callRoutes.js";
 import Call from "./models/Call.js";
 
 const app = express();
-app.use(cors({ origin: "*" }));
+const allowedOrigins = process.env.CLIENT_URL;
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
+
+
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
@@ -24,7 +31,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
   },
 });
@@ -70,6 +77,9 @@ io.on("connection", (socket) => {
 
     const room = io.sockets.adapter.rooms.get(roomId);
     const users = room ? [...room] : [];
+
+    const otherUsers = users.filter((id) => id !== socket.id);
+    socket.emit("all-users", otherUsers);
 
     let call = await Call.findOne({ roomId, endedAt: null });
 

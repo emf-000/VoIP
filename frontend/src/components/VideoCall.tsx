@@ -145,15 +145,19 @@ export default function VideoCall({
     socket.on("connect", () => {
       setUserId(socket.id);
     });
-     const init = async () => {
 
+    socket.on("all-users", (users: string[]) => {
+      users.forEach((id) => {
+        createPeer(id, socket);
+      });
+    });
+
+  const init = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true
     });
-
     localStream.current = stream;
-
     if (localVideo.current) {
       localVideo.current.srcObject = stream;
     }
@@ -279,6 +283,7 @@ socket.on("receive-message", (msg: ChatMessage) => {
     socket.off("answer");
     socket.off("ice-candidate");
     socket.off("user-joined");
+    socket.off("all-users");
     socket.off("room-full");
     socket.off("user-left");
     socket.off("receive-message");
