@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSocket, connectSocket } from "@/lib/socket";
+
 type ChatMessage = {
   message: string;
   senderId: string;
   senderName: string;
   createdAt: string | Date;
 };
-import { useRouter } from "next/navigation";
-import { getSocket } from "@/lib/socket";
 
 /* ================= TURN CONFIG ================= */
 const ICE_SERVERS: RTCConfiguration = {
@@ -126,6 +127,14 @@ export default function VideoCall({
   const isMobile =
   typeof window !== "undefined" &&
   /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      connectSocket(token)
+    }
+  }, []);
 
   useEffect(() => {
     if (!roomId) return;
@@ -461,17 +470,16 @@ const sendMessage = () => {
 return (
   <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
 
-    {/* 🔴 Recording Indicator */}
+    {/*  Recording Indicator */}
     {isRecording && (
       <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600/90 px-4 py-1 rounded-full text-sm z-50 shadow animate-pulse">
         ● Recording...
       </div>
     )}
 
-    {/* 🎥 VIDEO AREA */}
+    {/*  VIDEO AREA */}
     <div className="flex-1 flex justify-center items-center p-2 sm:p-4 overflow-hidden">
 
-      {/* 1 USER */}
       {Object.keys(remoteStreams).length === 0 && (
         <div className="w-full max-w-5xl">
           <video
@@ -484,7 +492,6 @@ return (
         </div>
       )}
 
-      {/* 2 USERS */}
       {Object.keys(remoteStreams).length === 1 && (
         <div className="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 gap-4">
 
@@ -514,7 +521,6 @@ return (
         </div>
       )}
 
-      {/* 3+ USERS */}
       {Object.keys(remoteStreams).length >= 2 && (
         <div className="
           w-full max-w-7xl grid gap-4
@@ -548,7 +554,7 @@ return (
       )}
     </div>
 
-    {/* 🎛️ CONTROLS (Zoom Style Bottom Bar) */}
+    {/* CONTROLS (Zoom Style Bottom Bar) */}
     <div className="bg-black/80 backdrop-blur border-t border-gray-800 px-4 py-3 flex justify-between items-center">
 
       {/* Left */}
@@ -593,7 +599,7 @@ return (
             Chat
           </button>
 
-          {/* 🔴 Notification Dot */}
+          {/* Notification Dot */}
           {hasNewMessage && (
             <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
           )}
@@ -611,7 +617,7 @@ return (
       <div />
     </div>
 
-    {/* 💬 CHAT (BOTTOM SHEET LIKE ZOOM MOBILE) */}
+    {/* CHAT (BOTTOM SHEET LIKE ZOOM MOBILE) */}
     {showChat && (
       <div className="
         fixed bottom-0 left-0 w-full h-[45%]

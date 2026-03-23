@@ -110,7 +110,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("leave-room", async (roomId) => {
+socket.on("leave-room", async (roomId) => {
   socket.leave(roomId);
 
   const room = io.sockets.adapter.rooms.get(roomId);
@@ -136,7 +136,6 @@ io.on("connection", (socket) => {
   socket.on("offer", ({ offer, to }) => {
     const socketId = userSocketMap[to];
     if (!socketId) return;
-
     socket.to(socketId).emit("offer", {
       offer,
       from: socket.user.id,
@@ -146,7 +145,6 @@ io.on("connection", (socket) => {
   socket.on("answer", ({ answer, to }) => {
     const socketId = userSocketMap[to];
     if (!socketId) return;
-
     socket.to(socketId).emit("answer", {
       answer,
       from: socket.user.id,
@@ -166,18 +164,14 @@ io.on("connection", (socket) => {
  socket.on("disconnecting", async () => {
   for (const roomId of socket.rooms) {
     if (roomId !== socket.id) {
-
       const room = io.sockets.adapter.rooms.get(roomId);
-
       const remainingCount = room ? room.size - 1 : 0;
-
       if (remainingCount === 0) {
         await Call.findOneAndUpdate(
           { roomId, endedAt: null },
           { endedAt: new Date() }
         );
       }
-
       socket.to(roomId).emit("user-left", {
         userId: socket.user.id,
       });
