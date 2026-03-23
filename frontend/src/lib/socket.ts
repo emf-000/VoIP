@@ -25,10 +25,7 @@ export const connectSocket = (token: string) => {
   }
 
   socket = io(SOCKET_URL, {
-    transports: ["websocket"],
-    auth: {
-      token,
-    },
+    auth: {token},
   });
 
   socket.on("connect_error", (err) => {
