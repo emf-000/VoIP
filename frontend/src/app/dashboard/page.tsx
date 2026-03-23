@@ -8,13 +8,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
       .then((data) => setUser(data));
-
+      
     fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/call/history`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -26,22 +25,17 @@ export default function Dashboard() {
 
   const deleteCall = async (id: string) => {
     const token = localStorage.getItem("token");
-
     if (!confirm("Delete this call history?")) return;
-
     await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/call/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-
     setCalls((prev) => prev.filter((call) => call._id !== id));
   };
 
   return (
     <div className="min-h-screen bg-black text-white px-4 py-6 sm:px-6">
-
       <div className="max-w-5xl mx-auto w-full space-y-8">
-
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h1 className="text-2xl font-bold">Dashboard</h1>
@@ -75,16 +69,12 @@ export default function Dashboard() {
                 {new Date(user.createdAt).toDateString()}
               </p>
             </div>
-
           </div>
-
         </div>
 
         {/* CALL HISTORY */}
         <div className="space-y-4">
-
           <h2 className="text-lg font-semibold">Recent Calls</h2>
-
           {calls.length === 0 && (
             <p className="text-gray-400">No calls yet</p>
           )}
@@ -93,24 +83,6 @@ export default function Dashboard() {
 
             const start = new Date(call.startedAt);
             const end = call.endedAt ? new Date(call.endedAt) : null;
-
-            let duration = "Active";
-
-            if (end && start) {
-              const diff = Math.floor((end.getTime() - start.getTime()) / 1000);
-
-              const hours = Math.floor(diff / 3600);
-              const minutes = Math.floor((diff % 3600) / 60);
-              const seconds = diff % 60;
-
-              if (hours > 0) {
-                duration = `${hours}h ${minutes}m ${seconds}s`;
-              } else if (minutes > 0) {
-                duration = `${minutes}m ${seconds}s`;
-              } else {
-                duration = `${seconds}s`;
-              }
-            }
 
             return (
               <div
@@ -124,12 +96,10 @@ export default function Dashboard() {
                   <p><b>Room:</b> {call.roomId}</p>
                   <p><b>Started:</b> {start.toLocaleString()}</p>
                   <p><b>Ended:</b> {end ? end.toLocaleString() : "Active"}</p>
-                  <p><b>Duration:</b> {duration}</p>
                 </div>
 
                 {/* BUTTONS */}
                 <div className="flex gap-2 flex-wrap">
-
                   <button
                     onClick={() => (window.location.href = `/room/${call.roomId}`)}
                     className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"
@@ -143,17 +113,12 @@ export default function Dashboard() {
                   >
                     Delete
                   </button>
-
                 </div>
-
               </div>
             );
           })}
-
         </div>
-
       </div>
-
     </div>
   );
 }

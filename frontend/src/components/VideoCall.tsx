@@ -50,23 +50,19 @@ export default function VideoCall({
   const [showChat, setShowChat] = useState<boolean>(false);
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const [hasNewMessage, setHasNewMessage] = useState(false);
 
   const createPeer = (userId: string, socket: any) => {
-
-      if (peers.current[userId]) {
+    if (peers.current[userId]) {
       return peers.current[userId];
     }
-
     const pc = new RTCPeerConnection(ICE_SERVERS);
-
     peers.current[userId] = pc;
 
     pc.onnegotiationneeded = async () => {
       if (pc.signalingState !== "stable") return;
-
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
       socket.emit("offer", {
         offer: pc.localDescription,
         to: userId,
@@ -100,15 +96,14 @@ export default function VideoCall({
 
   pc.ontrack = (event) => {
     const stream = event.streams[0];
+      setRemoteStreams((prev) => {
+        if (prev[userId]) return prev;
 
-  setRemoteStreams((prev) => {
-    if (prev[userId]) return prev;
-
-    return {
-      ...prev,
-      [userId]: stream,
-    };
-  });
+        return {
+          ...prev,
+          [userId]: stream,
+        };
+      });
     };
 
     pc.onicecandidate = (event) => {
@@ -153,20 +148,14 @@ export default function VideoCall({
     if (localVideo.current) {
       localVideo.current.srcObject = stream;
     }
-
     socket.emit("join-room", roomId);
   };
-  
   init();
    
-
     /* ================= SIGNALING ================= */
   socket.on("offer", async ({ offer, from }) => {
-
     console.log("Received offer from:", from);
-
     const pc = createPeer(from, socket);
-
     if (!localStream.current) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -186,7 +175,6 @@ export default function VideoCall({
       }
     }
 
-
       if (pc.signalingState !== "stable") {
         console.log("Skipping offer, state:", pc.signalingState);
        return;
@@ -200,10 +188,8 @@ export default function VideoCall({
     }
     candidateQueue.current[from] = [];
   }
-
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
     socket.emit("answer", {
       answer,
       to: from,
@@ -212,25 +198,21 @@ export default function VideoCall({
   });
 
   socket.on("answer", async ({ answer, from }) => {
-
     console.log("Received answer from:", from);
-
     const pc = peers.current[from];
     if (!pc) return;
-
     if (pc.signalingState !== "have-local-offer") {
-  console.log("Skipping answer, state:", pc.signalingState);
-  return;
-}
-
-await pc.setRemoteDescription(new RTCSessionDescription(answer));
-  if (candidateQueue.current[from]) {
-    for (const candidate of candidateQueue.current[from]) {
-      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      console.log("Skipping answer, state:", pc.signalingState);
+      return;
     }
-    candidateQueue.current[from] = [];
-  }
 
+  await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    if (candidateQueue.current[from]) {
+      for (const candidate of candidateQueue.current[from]) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      candidateQueue.current[from] = [];
+    }
   });
 
   socket.on("ice-candidate", ({ candidate, from }) => {
@@ -245,36 +227,28 @@ await pc.setRemoteDescription(new RTCSessionDescription(answer));
       if (!candidateQueue.current[from]) {
         candidateQueue.current[from] = [];
       }
-
       candidateQueue.current[from].push(candidate);
     }
-
   });
-
 
   socket.on("room-full", () => {
     alert("Room is full. Only 4 users allowed.");
     router.push("/");
   });
 
-socket.on("user-joined", ({ userId }) => {
-  console.log("New user to connect with:", userId);
-  createPeer(userId, socket);
-});
+  socket.on("user-joined", ({ userId }) => {
+    console.log("New user to connect with:", userId);
+    createPeer(userId, socket);
+  });
 
   socket.on("user-left", ({ userId }) => {
-
     console.log("User left:", userId);
-
     const pc = peers.current[userId];
-
     if (pc) {
       pc.close();
       delete peers.current[userId];
     }
-
     delete candidateQueue.current[userId];
-
     setRemoteStreams((prev) => {
       const updated = { ...prev };
       delete updated[userId];
@@ -282,9 +256,13 @@ socket.on("user-joined", ({ userId }) => {
     });
   });
 
-  socket.on("receive-message", (msg: ChatMessage) => {
-    setMessages((prev) => [...prev, msg]);
-  });
+socket.on("receive-message", (msg: ChatMessage) => {
+  setMessages((prev) => [...prev, msg]);
+  const socket = getSocket();
+  if (socket && msg.senderId !== socket.id && !showChat) {
+    setHasNewMessage(true);
+  }
+});
 
 
   return () => {
@@ -307,6 +285,19 @@ socket.on("user-joined", ({ userId }) => {
       }, 100);
     }
   }, [messages, showChat]);
+
+  useEffect(() => {
+  if (!localStream.current) return;
+  if (localVideo.current) {
+    localVideo.current.srcObject = localStream.current;
+  }
+}, [localStream.current]);
+
+useEffect(() => {
+  if (localVideo.current && localStream.current) {
+    localVideo.current.srcObject = localStream.current;
+  }
+}, [remoteStreams]);
 
   /* ================= RECORDING ================= */
 const startRecording = async () => {
@@ -468,163 +459,226 @@ const sendMessage = () => {
 
   /* ================= UI ================= */
 return (
-  <div className="min-h-screen bg-black text-white flex flex-col p-3 sm:p-4 overflow-hidden">
+  <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
 
-    <div
-      ref={recordingTextRef}
-      className="fixed top-3 left-1/2 -translate-x-1/2 bg-black/70 px-3 py-1 rounded text-red-500 z-50"
-      style={{ display: isRecording ? "block" : "none" }}
-    >
-      ● Recording... 0s
-    </div>
+    {/* 🔴 Recording Indicator */}
+    {isRecording && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-red-600/90 px-4 py-1 rounded-full text-sm z-50 shadow animate-pulse">
+        ● Recording...
+      </div>
+    )}
 
-    {/* Video Container */}
-  <div className="flex-1 flex flex-wrap justify-center items-center gap-3 p-2">
+    {/* 🎥 VIDEO AREA */}
+    <div className="flex-1 flex justify-center items-center p-2 sm:p-4 overflow-hidden">
 
-    <video
-      ref={localVideo}
-      autoPlay
-      muted
-      playsInline
-      style={{ minWidth: "200px" }}
-      className="
-        w-[45%] max-w-[500px]
-        aspect-video
-        bg-gray-900 rounded-lg object-cover
-      "
-    />
-
-    {Object.entries(remoteStreams).map(([id, stream]) => (
-        <video
-          key={id}
-          autoPlay
-          playsInline
-          style={{ minWidth: "200px" }}
-          ref={(video) => {
-            if (!video) return;
-            videoRefs.current[id] = video;
-            if (video.srcObject !== stream) {
-              video.srcObject = stream;
-            }
-          }}
-          className="
-            w-[45%] max-w-[500px]
-            aspect-video
-            bg-gray-900 rounded-lg object-cover
-          "
-        />
-      ))}
-  </div>
-
-  <canvas ref={canvasRef} width={1920} height={1080} style={{ display: "none" }} />
-
-    {/* Controls */}
-    <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mt-4">
-
-      {!isMobile && (
-        <>
-
-          <button
-            onClick={startRecording}
-            disabled={Object.keys(remoteStreams).length === 0 || isRecording}
-            className="bg-green-600 hover:bg-green-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
-          >
-            {isRecording ? "Recording..." : "Start Recording"}
-          </button>
-
-          <button
-            onClick={stopRecording}
-            disabled={!isRecording}
-            className="bg-yellow-600 hover:bg-yellow-700 px-3 sm:px-4 py-2 rounded text-sm sm:text-base disabled:opacity-50"
-          >
-            Stop & Save
-          </button>
-        </>
+      {/* 1 USER */}
+      {Object.keys(remoteStreams).length === 0 && (
+        <div className="w-full max-w-5xl">
+          <video
+            ref={localVideo}
+            autoPlay
+            muted
+            playsInline
+            className="w-full h-full max-h-[75vh] aspect-video bg-gray-900 rounded-2xl object-cover shadow-2xl"
+          />
+        </div>
       )}
 
-      <button
-        onClick={() => setShowChat((prev) => !prev)}
-        className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded"
-      >
-        {showChat ? "Close Chat" : "Open Chat"}
-      </button>
+      {/* 2 USERS */}
+      {Object.keys(remoteStreams).length === 1 && (
+        <div className="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-      <button
-        onClick={endCall}
-        className="bg-red-600 hover:bg-red-700 px-6 py-3 rounded text-sm sm:text-base"
-      >
-        End Call
-      </button>
+          <video
+            ref={localVideo}
+            autoPlay
+            muted
+            playsInline
+            className="w-full aspect-video bg-gray-900 rounded-xl object-cover"
+          />
+
+          {Object.entries(remoteStreams).map(([id, stream]) => (
+            <video
+              key={id}
+              autoPlay
+              playsInline
+              ref={(video) => {
+              if (!video) return;
+              videoRefs.current[id] = video;
+              if (!video.srcObject) {
+                video.srcObject = stream;
+              }
+            }}
+              className="w-full aspect-video bg-gray-900 rounded-xl object-cover"
+            />
+          ))}
+        </div>
+      )}
+
+      {/* 3+ USERS */}
+      {Object.keys(remoteStreams).length >= 2 && (
+        <div className="
+          w-full max-w-7xl grid gap-4
+          grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
+        ">
+
+          <video
+            ref={localVideo}
+            autoPlay
+            muted
+            playsInline
+            className="w-full aspect-video bg-gray-900 rounded-xl object-cover"
+          />
+
+          {Object.entries(remoteStreams).map(([id, stream]) => (
+            <video
+              key={id}
+              autoPlay
+              playsInline
+              ref={(video) => {
+              if (!video) return;
+              videoRefs.current[id] = video;
+              if (!video.srcObject) {
+                video.srcObject = stream;
+              }
+            }}
+              className="w-full aspect-video bg-gray-900 rounded-xl object-cover"
+            />
+          ))}
+        </div>
+      )}
     </div>
 
-  {showChat && (
-  <div className="
-    fixed z-50 bg-gray-900 text-white flex flex-col shadow-lg
-    w-full h-[40%] bottom-0 left-0
-  ">
+    {/* 🎛️ CONTROLS (Zoom Style Bottom Bar) */}
+    <div className="bg-black/80 backdrop-blur border-t border-gray-800 px-4 py-3 flex justify-between items-center">
 
-    {/* Header */}
-    <div className="flex items-center justify-between p-3 border-b border-gray-700">
-      <span className="text-lg font-semibold">Chat</span>
-      <button
-        onClick={() => setShowChat(false)}
-        className="text-red-400"
-      >
-        ✕
-      </button>
-    </div>
+      {/* Left */}
+      <div className="text-sm text-gray-400">
+        Video Call
+      </div>
 
-    {/* Messages */}
-    <div className="flex-1 overflow-y-auto p-2 space-y-2">
-      {messages.map((msg, i) => {
-        const isMe = msg.senderId === userId;
+      {/* Center Controls */}
+      <div className="flex items-center gap-3">
 
-        return (
-          <div
-            key={i}
-            className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`
-                max-w-[75%] px-3 py-2 rounded-lg text-sm
-                ${isMe
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-700 text-white"}
-              `}
+        {!isMobile && (
+          <>
+            <button
+              onClick={startRecording}
+              disabled={Object.keys(remoteStreams).length === 0 || isRecording}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-full text-sm disabled:opacity-50"
             >
-              {!isMe && (
-                <div className="text-xs text-green-400 font-semibold mb-1">
-                  {msg.senderName}
-                </div>
-              )}
-              {msg.message}
-            </div>
-          </div>
-        );
-      })}
-      <div ref={bottomRef} />
+              {isRecording ? "Recording..." : "Record"}
+            </button>
+
+            <button
+              onClick={stopRecording}
+              disabled={!isRecording}
+              className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-full text-sm disabled:opacity-50"
+            >
+              Stop
+            </button>
+          </>
+        )}
+
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowChat((prev) => {
+                const newState = !prev;
+                if (newState) setHasNewMessage(false);
+                return newState;
+              });
+            }}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-full text-sm"
+          >
+            Chat
+          </button>
+
+          {/* 🔴 Notification Dot */}
+          {hasNewMessage && (
+            <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+          )}
+        </div>
+
+        <button
+          onClick={endCall}
+          className="bg-red-600 hover:bg-red-700 px-5 py-2 rounded-full text-sm font-semibold"
+        >
+          End
+        </button>
+      </div>
+
+      {/* Right */}
+      <div />
     </div>
 
-    {/* Input */}
-    <div className="flex gap-2 p-2 border-t border-gray-700">
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") sendMessage();
-        }}
-        className="flex-1 px-3 py-2 rounded bg-black border border-gray-700 text-sm"
-        placeholder="Type message..."
-      />
-      <button
-        onClick={sendMessage}
-        className="bg-blue-600 px-4 py-2 rounded text-sm"
-      >
-        Send
-      </button>
-    </div>
-  </div>
-)}
+    {/* 💬 CHAT (BOTTOM SHEET LIKE ZOOM MOBILE) */}
+    {showChat && (
+      <div className="
+        fixed bottom-0 left-0 w-full h-[45%]
+        bg-gray-950 text-white flex flex-col
+        border-t border-gray-800 z-50 rounded-t-2xl
+      ">
+
+        {/* Header */}
+        <div className="flex justify-between items-center p-3 border-b border-gray-800">
+          <span className="font-semibold">Chat</span>
+          <button
+            onClick={() => setShowChat(false)}
+            className="text-gray-400 hover:text-red-400"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-3 pr-1 scrollbar-hide bg-gray-950">
+          {messages.map((msg, i) => {
+            const isMe = msg.senderId === userId;
+
+            return (
+              <div key={i} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`
+                    max-w-[75%] px-4 py-2 rounded-2xl text-sm
+                    ${isMe
+                      ? "bg-blue-600 rounded-br-none"
+                      : "bg-gray-800 rounded-bl-none"}
+                  `}
+                >
+                  {!isMe && (
+                    <div className="text-xs text-green-400 mb-1">
+                      {msg.senderName}
+                    </div>
+                  )}
+                  {msg.message}
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="flex gap-2 p-3 border-t border-gray-800">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            className="flex-1 px-4 py-2 rounded-full bg-black border border-gray-700 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            placeholder="Type a message..."
+          />
+          <button
+            onClick={sendMessage}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-full text-sm"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* Hidden Canvas */}
+    <canvas ref={canvasRef} width={1920} height={1080} className="hidden" />
   </div>
 );
 }
