@@ -277,7 +277,6 @@ socket.on("receive-message", (msg: ChatMessage) => {
   }
 });
 
-
   return () => {
     socket.off("offer");
     socket.off("answer");
@@ -323,36 +322,28 @@ const startRecording = async () => {
 
     const draw = () => {
       if (!ctx) return;
-
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
       const videos = document.querySelectorAll("video");
-
       const cols = 2;
       const rows = Math.ceil(videos.length / cols);
-
       const w = canvas.width / cols;
       const h = canvas.height / rows;
 
       videos.forEach((video: any, i) => {
         const x = (i % cols) * w;
         const y = Math.floor(i / cols) * h;
-
         try {
           ctx.drawImage(video, x, y, w, h);
         } catch {}
       });
-
       requestAnimationFrame(draw);
     };
 
     draw();
 
     const stream = canvas.captureStream(30);
-
     recordedChunks.current = [];
-
     mediaRecorder.current = new MediaRecorder(stream, {
       mimeType: "video/webm;codecs=vp9"
     });
@@ -376,7 +367,6 @@ const startRecording = async () => {
     setIsRecording(true);
 
     let seconds = 0;
-
     timerRef.current = setInterval(() => {
       seconds++;
 
@@ -392,12 +382,10 @@ const startRecording = async () => {
 
 const stopRecording = () => {
   mediaRecorder.current?.stop();
-
   if (timerRef.current) {
     clearInterval(timerRef.current);
     timerRef.current = null;
   }
-
   if (recordingTextRef.current) {
     recordingTextRef.current.textContent = "● Recording... 0s";
   }
@@ -531,7 +519,6 @@ return (
           w-full max-w-7xl grid gap-4
           grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
         ">
-
           <video
             ref={localVideo}
             autoPlay
@@ -559,17 +546,9 @@ return (
       )}
     </div>
 
-    {/* CONTROLS (Zoom Style Bottom Bar) */}
+    {/* CONTROLS */}
     <div className="bg-black/80 backdrop-blur border-t border-gray-800 px-4 py-3 flex justify-between items-center">
-
-      {/* Left */}
-      <div className="text-sm text-gray-400">
-        Video Call
-      </div>
-
-      {/* Center Controls */}
       <div className="flex items-center gap-3">
-
         {!isMobile && (
           <>
             <button
@@ -603,8 +582,6 @@ return (
           >
             Chat
           </button>
-
-          {/* Notification Dot */}
           {hasNewMessage && (
             <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
           )}
@@ -617,12 +594,9 @@ return (
           End
         </button>
       </div>
-
-      {/* Right */}
       <div />
     </div>
 
-    {/* CHAT (BOTTOM SHEET LIKE ZOOM MOBILE) */}
     {showChat && (
       <div className="
         fixed bottom-0 left-0 w-full h-[45%]

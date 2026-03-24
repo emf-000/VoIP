@@ -12,9 +12,7 @@ export default function LogoutButton() {
     if (socket) {
       socket.disconnect(); 
     }
-
     localStorage.removeItem("token"); 
-
     router.push("/login");
   };
 

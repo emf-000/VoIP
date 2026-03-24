@@ -16,9 +16,9 @@ export default function AutoLogout(): null {
       const now = Date.now();
       const diff = now - parseInt(loginTime, 10);
 
-      const ONE_DAY = 24 * 60 * 60 * 1000;
+      const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
-      if (diff > ONE_DAY) {
+      if (diff > TWELVE_HOURS) {
         const socket = getSocket();
         if (socket) socket.disconnect();
 

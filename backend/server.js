@@ -122,22 +122,18 @@ io.on("connection", (socket) => {
 
 socket.on("leave-room", async (roomId) => {
   socket.leave(roomId);
-
   const room = io.sockets.adapter.rooms.get(roomId);
   const remainingCount = room ? room.size : 0;
-
   if (remainingCount === 0) {
     await Call.findOneAndUpdate(
       { roomId, endedAt: null },
       { endedAt: new Date() }
     );
   }
-
   if (remainingCount === 1) {
     const remainingUser = [...room][0];
     io.to(remainingUser).emit("role", { initiator: true });
   }
-
   socket.to(roomId).emit("user-left", {
     userId: socket.user.id,
   });
