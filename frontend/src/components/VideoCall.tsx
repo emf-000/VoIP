@@ -52,6 +52,7 @@ export default function VideoCall({
   const videoRefs = useRef<{ [key: string]: HTMLVideoElement | null }>({});
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [hasNewMessage, setHasNewMessage] = useState(false);
+  const showChatRef = useRef(false);
 
   const createPeer = (userId: string, socket: any) => {
     if (peers.current[userId]) {
@@ -272,7 +273,7 @@ export default function VideoCall({
 socket.on("receive-message", (msg: ChatMessage) => {
   setMessages((prev) => [...prev, msg]);
   const socket = getSocket();
-  if (socket && msg.senderId !== socket.id && !showChat) {
+  if (socket && msg.senderId !== socket.id && !showChatRef.current) {
     setHasNewMessage(true);
   }
 });
@@ -300,11 +301,15 @@ socket.on("receive-message", (msg: ChatMessage) => {
   }, [messages, showChat]);
 
   useEffect(() => {
-  if (!localStream.current) return;
-  if (localVideo.current) {
-    localVideo.current.srcObject = localStream.current;
-  }
-}, [localStream.current]);
+    showChatRef.current = showChat;
+  }, [showChat]);
+
+  useEffect(() => {
+    if (!localStream.current) return;
+    if (localVideo.current) {
+      localVideo.current.srcObject = localStream.current;
+    }
+  }, [localStream.current]);
 
 useEffect(() => {
   if (localVideo.current && localStream.current) {
@@ -461,7 +466,7 @@ const sendMessage = () => {
 
   /* ================= UI ================= */
 return (
-  <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
+  <div className="h-screen w-screen bg-black text-white flex flex-col  overflow-hidden">
 
     {/*  Recording Indicator */}
     {isRecording && (
@@ -547,8 +552,8 @@ return (
     </div>
 
     {/* CONTROLS */}
-    <div className="bg-black/80 backdrop-blur border-t border-gray-800 px-4 py-3 flex justify-between items-center">
-      <div className="flex items-center gap-3">
+    <div className="bg-black/80 backdrop-blur border-t border-gray-800 px-4 py-3 flex justify-center items-center">
+      <div className="flex items-center gap-4 justify-center">
         {!isMobile && (
           <>
             <button
