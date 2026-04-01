@@ -35,6 +35,14 @@ export default function LoginPage() {
       }
 
       localStorage.setItem("token", data.token);
+      localStorage.setItem("isAdmin", data.isAdmin ? "true" : "false");
+
+      // redirect
+      if (data.isAdmin) {
+        router.push("/dashboard");
+      } else {
+        router.push("/");
+      }
       localStorage.setItem("loginTime", Date.now().toString())
 
       connectSocket(data.token);

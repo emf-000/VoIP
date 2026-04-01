@@ -13,7 +13,7 @@ import callRoutes from "./routes/callRoutes.js";
 import Call from "./models/Call.js";
 
 const app = express();
-const allowedOrigins = process.env.CLIENT_URL;
+const allowedOrigins = process.env.FRONTEND_URL;
 
 app.use(cors({
   origin: allowedOrigins,

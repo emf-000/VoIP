@@ -7,20 +7,22 @@ export const register = async (req, res) => {
   const { name, email, password } = req.body;
 
   const hashedPassword = await bcrypt.hash(password, 10);
+  const userCount = await User.countDocuments();
 
   const user = await User.create({
     name,
     email,
     password: hashedPassword,
+    isAdmin: userCount === 0,
   });
 
   const token = jwt.sign(
-    { id: user._id, name: user.name },
+    { id: user._id, name: user.name, isAdmin: user.isAdmin,},
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
 
-  res.json({ token });
+  res.json({ token, isAdmin: user.isAdmin,});
 };
 
 // LOGIN
@@ -34,10 +36,10 @@ export const login = async (req, res) => {
   if (!isMatch) return res.status(400).json({ message: "Wrong password" });
 
   const token = jwt.sign(
-    { id: user._id, name: user.name },
+    { id: user._id, name: user.name, isAdmin: user.isAdmin, },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
 
-  res.json({ token });
+  res.json({ token, isAdmin: user.isAdmin,});
 };
